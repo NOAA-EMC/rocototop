@@ -41,12 +41,14 @@ def test_parser_init(mock_rocoto_files):
     assert parser.database_file == db
     parser.parse_workflow()
     assert len(parser.tasks_ordered) > 0
-    assert "task1" in [t[0] for t in parser.tasks_ordered]
+    assert "task1" in parser.tasks_ordered
 
 
 def test_parser_get_status(mock_rocoto_files):
     wf, db = mock_rocoto_files
     parser = RocotoParser(wf, db)
+    # We should call parse_workflow to have task definitions
+    parser.parse_workflow()
     status = parser.get_status()
     assert len(status) == 1
     assert status[0]["cycle"] == "202301010000"

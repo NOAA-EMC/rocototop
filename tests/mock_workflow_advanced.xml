@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<workflow name="test">
+  <cycledef group="default">202301010000 202301011200 06:00:00</cycledef>
+  <task name="post_proc" cycledefs="default">
+    <command>echo hello</command>
+    <account>research</account>
+    <dependency>
+        <taskdep task="prev_task"/>
+    </dependency>
+  </task>
+</workflow>

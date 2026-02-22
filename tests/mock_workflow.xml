@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<workflow name="test">
+  <cycledef group="default">202301010000 202301011200 06:00:00</cycledef>
+  <metatask name="ensemble">
+    <var name="member">01 02</var>
+    <task name="post_#member#" cycledefs="default"></task>
+  </metatask>
+</workflow>
