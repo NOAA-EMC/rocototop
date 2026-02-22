@@ -1,7 +1,5 @@
-import os
-import sqlite3
-import pytest
 from rocotoviewer.parser import RocotoParser
+
 
 def test_parser_missing_files():
     parser = RocotoParser("nonexistent.xml", "nonexistent.db")

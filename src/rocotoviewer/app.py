@@ -3,13 +3,13 @@
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, Tree, Static, Input
+from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 
 from rocotoviewer.parser import RocotoParser
 
@@ -77,8 +77,8 @@ class RocotoApp(App[None]):
     def __init__(self, workflow_file: str, database_file: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.parser: RocotoParser = RocotoParser(workflow_file, database_file)
-        self.all_data: List[Dict[str, Any]] = []
-        self.last_selected_task: Dict[str, Any] | None = None
+        self.all_data: list[dict[str, Any]] = []
+        self.last_selected_task: dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
@@ -181,7 +181,7 @@ class RocotoApp(App[None]):
             self.last_selected_task = selected_task
             self._display_details(selected_task, cycle_str)
 
-    def _display_details(self, task: Dict[str, Any], cycle: str) -> None:
+    def _display_details(self, task: dict[str, Any], cycle: str) -> None:
         """Display task details in the panel."""
         panel = self.query_one("#details_panel", Static)
         details = task.get("details", {})
@@ -191,27 +191,43 @@ class RocotoApp(App[None]):
         stderr = self.parser.resolve_cyclestr(details.get("stderr", ""), cycle)
         join = self.parser.resolve_cyclestr(details.get("join", ""), cycle)
 
+        exit_str = task['exit'] if task['exit'] is not None else '-'
         content = f"[bold]Task:[/bold] {task['task']}  [bold]Cycle:[/bold] {cycle}\n"
-        content += f"[bold]State:[/bold] {task['state']}  [bold]Job ID:[/bold] {task['jobid'] or '-'}\n"
-        content += f"[bold]Exit Status:[/bold] {task['exit'] if task['exit'] is not None else '-'}  [bold]Tries:[/bold] {task['tries']}\n"
+        content += (
+            f"[bold]State:[/bold] {task['state']}  "
+            f"[bold]Job ID:[/bold] {task['jobid'] or '-'}\n"
+        )
+        content += (
+            f"[bold]Exit Status:[/bold] {exit_str}  "
+            f"[bold]Tries:[/bold] {task['tries']}\n"
+        )
         content += f"[bold]Duration:[/bold] {task['duration'] or '-'}\n"
         content += "-" * 40 + "\n"
         content += f"[bold]Command:[/bold] {command}\n"
-        if account := details.get("account"): content += f"[bold]Account:[/bold] {account}\n"
-        if queue := details.get("queue"): content += f"[bold]Queue:[/bold] {queue}\n"
-        if walltime := details.get("walltime"): content += f"[bold]Walltime:[/bold] {walltime}\n"
-        if memory := details.get("memory"): content += f"[bold]Memory:[/bold] {memory}\n"
+        if account := details.get("account"):
+            content += f"[bold]Account:[/bold] {account}\n"
+        if queue := details.get("queue"):
+            content += f"[bold]Queue:[/bold] {queue}\n"
+        if walltime := details.get("walltime"):
+            content += f"[bold]Walltime:[/bold] {walltime}\n"
+        if memory := details.get("memory"):
+            content += f"[bold]Memory:[/bold] {memory}\n"
 
         if join:
             content += f"[bold]Log (Joined):[/bold] {join}\n"
         else:
-            if stdout: content += f"[bold]Stdout:[/bold] {stdout}\n"
-            if stderr: content += f"[bold]Stderr:[/bold] {stderr}\n"
+            if stdout:
+                content += f"[bold]Stdout:[/bold] {stdout}\n"
+            if stderr:
+                content += f"[bold]Stderr:[/bold] {stderr}\n"
 
         if deps := details.get("dependencies"):
             content += "[bold]Dependencies:[/bold]\n"
             for dep in deps:
-                content += f"  - {dep['type']}: {dep.get('attrib', {})} {dep.get('text', '')}\n"
+                content += (
+                    f"  - {dep['type']}: {dep.get('attrib', {})} "
+                    f"{dep.get('text', '')}\n"
+                )
 
         panel.update(content)
 

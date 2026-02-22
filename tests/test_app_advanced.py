@@ -1,21 +1,32 @@
 import sqlite3
+
 import pytest
-from textual.widgets import DataTable, Static, Input
+from textual.widgets import DataTable, Input, Static
+
 from rocotoviewer.app import RocotoApp
+
 
 @pytest.fixture
 def mock_advanced_files(tmp_path):
     wf = tmp_path / "wf.xml"
     db = tmp_path / "db.db"
-    wf.write_text("""<workflow><task name="t1"><command>cmd</command></task></workflow>""")
+    wf.write_text(
+        """<workflow><task name="t1"><command>cmd</command></task></workflow>"""
+    )
     conn = sqlite3.connect(db)
     conn.execute("CREATE TABLE cycles (cycle INTEGER)")
     conn.execute("INSERT INTO cycles VALUES (202301010000)")
-    conn.execute("CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)")
-    conn.execute("INSERT INTO jobs VALUES ('t1', 202301010000, 'SUCCEEDED', 0, 10, 1, '123')")
+    conn.execute(
+        "CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, "
+        "exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO jobs VALUES ('t1', 202301010000, 'SUCCEEDED', 0, 10, 1, '123')"
+    )
     conn.commit()
     conn.close()
     return str(wf), str(db)
+
 
 @pytest.mark.asyncio
 async def test_app_details_display(mock_advanced_files):
@@ -36,6 +47,7 @@ async def test_app_details_display(mock_advanced_files):
         content = str(details.render())
         assert "t1" in content
         assert "cmd" in content
+
 
 @pytest.mark.asyncio
 async def test_app_filtering(mock_advanced_files):

@@ -9,7 +9,7 @@ import re
 import sqlite3
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any
 
 # Constants
 DEFAULT_CYCLE = "default_cycle"
@@ -32,9 +32,9 @@ class RocotoTask:
         self.join: str = ""
         self.stdout: str = ""
         self.stderr: str = ""
-        self.dependencies: List[Dict[str, Any]] = []
+        self.dependencies: list[dict[str, Any]] = []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "cycledefs": self.cycledefs,
@@ -62,7 +62,9 @@ class RocotoParser:
         self.tasks_dict: dict[str, RocotoTask] = {}
         self.tasks_ordered: list[str] = []
         self.metatask_list: dict[str, list[str]] = collections.defaultdict(list)
-        self.cycledef_group_cycles: dict[str, list[str]] = collections.defaultdict(list)
+        self.cycledef_group_cycles: dict[str, list[str]] = (
+            collections.defaultdict(list)
+        )
 
     def parse_workflow(self) -> None:
         """Parse the XML workflow file."""
@@ -77,10 +79,15 @@ class RocotoParser:
         try:
             with open(self.workflow_file) as f:
                 content = f.read()
-                dtd_match = re.search(r"<!DOCTYPE workflow\s+\[(.*?)\]>", content, re.DOTALL)
+                dtd_match = re.search(
+                    r"<!DOCTYPE workflow\s+\[(.*?)\]>", content, re.DOTALL
+                )
                 if dtd_match:
                     dtd_content = dtd_match.group(1)
-                    entity_matches = re.finditer(r'<!ENTITY\s+(\w+)\s+(?:SYSTEM\s+)?["\']([^"\']*)["\']\s*>', dtd_content)
+                    entity_matches = re.finditer(
+                        r'<!ENTITY\s+(\w+)\s+(?:SYSTEM\s+)?["\']([^"\']*)["\']\s*>',
+                        dtd_content
+                    )
                     for match in entity_matches:
                         name, value = match.groups()
                         for k, v in entity_values.items():
@@ -95,7 +102,7 @@ class RocotoParser:
             return
 
         try:
-            with open(self.workflow_file, 'r') as f:
+            with open(self.workflow_file) as f:
                 content = f.read()
 
             # Substitute entities
@@ -109,12 +116,13 @@ class RocotoParser:
                     break
 
             # Remove DOCTYPE properly
-            content = re.sub(r'<!DOCTYPE workflow\s+\[.*?\]>', '', content, flags=re.DOTALL)
+            content = re.sub(
+                r'<!DOCTYPE workflow\s+\[.*?\]>', '', content, flags=re.DOTALL
+            )
             content = re.sub(r'<!DOCTYPE.*?>', '', content, flags=re.DOTALL)
 
             root = ET.fromstring(content.strip())
         except Exception:
-            # Re-initialize to clear any partial data if desired, but here we just return
             return
 
         self.tasks_dict = {}
@@ -148,12 +156,16 @@ class RocotoParser:
                     inc = timedelta(hours=int(h), minutes=int(m), seconds=int(s or 0))
                     curr = start
                     while curr <= end:
-                        self.cycledef_group_cycles[group].append(curr.strftime(CYCLE_FORMAT))
+                        self.cycledef_group_cycles[group].append(
+                            curr.strftime(CYCLE_FORMAT)
+                        )
                         curr += inc
             except Exception:
                 pass
 
-    def _expand_metatask(self, element: ET.Element, current_vars: dict[str, str], parent_metatasks: list[str]) -> None:
+    def _expand_metatask(
+        self, element: ET.Element, current_vars: dict[str, str], parent_metatasks: list[str]
+    ) -> None:
         m_name = element.attrib.get("name", NO_NAME)
 
         vars_dict: dict[str, list[str]] = {}
@@ -189,7 +201,9 @@ class RocotoParser:
                 elif child.tag == "metatask":
                     self._expand_metatask(child, new_vars, new_parents)
 
-    def _add_task(self, element: ET.Element, vars_dict: dict[str, str], parent_metatasks: list[str]) -> None:
+    def _add_task(
+        self, element: ET.Element, vars_dict: dict[str, str], parent_metatasks: list[str]
+    ) -> None:
         name = element.attrib.get("name", NO_NAME)
         cycledefs = element.attrib.get("cycledefs", DEFAULT_CYCLE)
 
@@ -200,14 +214,22 @@ class RocotoParser:
         task = RocotoTask(name, cycledefs)
 
         for sub in element:
-            if sub.tag == "command": task.command = (sub.text or "").strip()
-            elif sub.tag == "account": task.account = (sub.text or "").strip()
-            elif sub.tag == "queue": task.queue = (sub.text or "").strip()
-            elif sub.tag == "walltime": task.walltime = (sub.text or "").strip()
-            elif sub.tag == "memory": task.memory = (sub.text or "").strip()
-            elif sub.tag == "join": task.join = (sub.text or "").strip()
-            elif sub.tag == "stdout": task.stdout = (sub.text or "").strip()
-            elif sub.tag == "stderr": task.stderr = (sub.text or "").strip()
+            if sub.tag == "command":
+                task.command = (sub.text or "").strip()
+            elif sub.tag == "account":
+                task.account = (sub.text or "").strip()
+            elif sub.tag == "queue":
+                task.queue = (sub.text or "").strip()
+            elif sub.tag == "walltime":
+                task.walltime = (sub.text or "").strip()
+            elif sub.tag == "memory":
+                task.memory = (sub.text or "").strip()
+            elif sub.tag == "join":
+                task.join = (sub.text or "").strip()
+            elif sub.tag == "stdout":
+                task.stdout = (sub.text or "").strip()
+            elif sub.tag == "stderr":
+                task.stderr = (sub.text or "").strip()
             elif sub.tag == "dependency":
                 task.dependencies = self._parse_deps(sub)
 
@@ -216,7 +238,7 @@ class RocotoParser:
         for p_name in parent_metatasks:
             self.metatask_list[p_name].append(name)
 
-    def _parse_deps(self, element: ET.Element) -> List[Dict[str, Any]]:
+    def _parse_deps(self, element: ET.Element) -> list[dict[str, Any]]:
         deps = []
         for child in element:
             dep = {"type": child.tag, "attrib": dict(child.attrib)}
@@ -250,11 +272,19 @@ class RocotoParser:
                 delta = timedelta()
                 try:
                     if len(parts) == 4:
-                        delta = timedelta(days=int(parts[0]), hours=int(parts[1]), minutes=int(parts[2]), seconds=int(parts[3]))
+                        delta = timedelta(
+                            days=int(parts[0]), hours=int(parts[1]),
+                            minutes=int(parts[2]), seconds=int(parts[3])
+                        )
                     elif len(parts) == 3:
-                        delta = timedelta(hours=int(parts[0]), minutes=int(parts[1]), seconds=int(parts[2]))
+                        delta = timedelta(
+                            hours=int(parts[0]), minutes=int(parts[1]),
+                            seconds=int(parts[2])
+                        )
                     elif len(parts) == 2:
-                        delta = timedelta(minutes=int(parts[0]), seconds=int(parts[1]))
+                        delta = timedelta(
+                            minutes=int(parts[0]), seconds=int(parts[1])
+                        )
                     elif len(parts) == 1:
                         delta = timedelta(seconds=int(parts[0]))
                 except ValueError:
@@ -277,7 +307,10 @@ class RocotoParser:
             res = res.replace("@s", str(int(current_dt.timestamp())))
             return res
 
-        return re.sub(r'<cyclestr(?:\s+[^>]*?)?>(.*?)</cyclestr>', replace_cyclestr, text, flags=re.DOTALL)
+        return re.sub(
+            r'<cyclestr(?:\s+[^>]*?)?>(.*?)</cyclestr>',
+            replace_cyclestr, text, flags=re.DOTALL
+        )
 
     def get_status(self) -> list[dict[str, Any]]:
         if not os.path.exists(self.database_file):
@@ -287,9 +320,16 @@ class RocotoParser:
             connection = sqlite3.connect(self.database_file)
             connection.row_factory = sqlite3.Row
             c = connection.cursor()
-            cycles_raw = [row["cycle"] for row in c.execute("SELECT cycle FROM cycles ORDER BY cycle ASC")]
+            cycles_raw = [
+                row["cycle"] for row in c.execute(
+                    "SELECT cycle FROM cycles ORDER BY cycle ASC"
+                )
+            ]
             jobs_data = collections.defaultdict(dict)
-            q = c.execute("SELECT taskname, cycle, state, exit_status, duration, tries, jobid FROM jobs")
+            q = c.execute(
+                "SELECT taskname, cycle, state, exit_status, duration, tries, jobid "
+                "FROM jobs"
+            )
             for row in q:
                 jobs_data[row["cycle"]][row["taskname"]] = dict(row)
             connection.close()
@@ -301,8 +341,6 @@ class RocotoParser:
             cycle_str = self._parse_cycle(cycle_raw)
             tasks_status = []
 
-            # If tasks_ordered is empty, it means parse_workflow wasn't called or failed
-            # For backward compatibility with tests, we can fall back to showing just DB tasks
             if not self.tasks_ordered:
                 for tname, job in jobs_data.get(cycle_raw, {}).items():
                     tasks_status.append({
@@ -318,7 +356,9 @@ class RocotoParser:
                 for tname in self.tasks_ordered:
                     task_def = self.tasks_dict[tname]
                     if task_def.cycledefs != DEFAULT_CYCLE:
-                        if cycle_str not in self.cycledef_group_cycles.get(task_def.cycledefs, []):
+                        if cycle_str not in self.cycledef_group_cycles.get(
+                            task_def.cycledefs, []
+                        ):
                             continue
 
                     job = jobs_data.get(cycle_raw, {}).get(tname)

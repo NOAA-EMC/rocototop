@@ -1,6 +1,5 @@
-import os
-import xml.etree.ElementTree as ET
 from rocotoviewer.parser import RocotoParser
+
 
 def test_metatask_expansion(tmp_path):
     workflow_file = tmp_path / "workflow.xml"

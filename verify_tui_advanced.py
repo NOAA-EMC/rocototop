@@ -1,7 +1,9 @@
 import asyncio
-import sqlite3
 import os
+import sqlite3
+
 from rocotoviewer.app import RocotoApp
+
 
 async def take_screenshot():
     # Setup mock data
@@ -21,19 +23,26 @@ async def take_screenshot():
   </task>
 </workflow>""")
 
-    if os.path.exists(db): os.remove(db)
+    if os.path.exists(db):
+        os.remove(db)
     conn = sqlite3.connect(db)
     c = conn.cursor()
     c.execute("CREATE TABLE cycles (cycle INTEGER)")
     c.execute("INSERT INTO cycles VALUES (1672531200)")
-    c.execute("CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)")
-    c.execute("INSERT INTO jobs VALUES ('post_proc', 1672531200, 'RUNNING', NULL, 3600, 1, '88888')")
+    c.execute(
+        "CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, "
+        "exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)"
+    )
+    c.execute(
+        "INSERT INTO jobs VALUES ('post_proc', 1672531200, 'RUNNING', NULL, 3600, 1, "
+        "'88888')"
+    )
     conn.commit()
     conn.close()
 
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(1.0) # Wait for refresh
+        await pilot.pause(1.0)  # Wait for refresh
         # Select row
         await pilot.press("down")
         await pilot.press("enter")
@@ -43,6 +52,7 @@ async def take_screenshot():
         # Textual screenshots are SVG.
         app.save_screenshot("rocoto_advanced.svg")
         print("Screenshot saved to rocoto_advanced.svg")
+
 
 if __name__ == "__main__":
     asyncio.run(take_screenshot())

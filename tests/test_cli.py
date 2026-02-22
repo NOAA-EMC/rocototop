@@ -1,7 +1,10 @@
 import sys
 from unittest.mock import patch
+
 import pytest
+
 from rocotoviewer.cli import main
+
 
 def test_cli_help():
     with patch.object(sys, 'argv', ['rocotoviewer', '--help']):

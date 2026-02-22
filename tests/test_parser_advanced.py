@@ -1,5 +1,6 @@
 from rocotoviewer.parser import RocotoParser
 
+
 def test_resolve_cyclestr():
     parser = RocotoParser("wf", "db")
     cycle = "202301010000"
