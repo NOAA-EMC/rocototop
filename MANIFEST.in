@@ -1,28 +1,3 @@
-# Include all necessary files for distribution
-
-# Source files - explicit includes to ensure everything is included
-recursive-include rocotoviewer *.py
-recursive-include rocotoviewer/docs *.md
-recursive-include rocotoviewer/examples *.xml
-recursive-include rocotoviewer/examples *.yaml
-recursive-include rocotoviewer/data *
-
-# Documentation
-global-exclude *.pyc
-global-exclude __pycache__
-global-exclude .pytest_cache
-global-exclude .coverage
-global-exclude .DS_Store
-
-# License and readme
 include LICENSE
 include README.md
-include pyproject.toml
-include requirements.txt
-
-# Explicitly include package directories
-recursive-include rocotoviewer/config *.py
-recursive-include rocotoviewer/core *.py
-recursive-include rocotoviewer/parsers *.py
-recursive-include rocotoviewer/ui *.py
-recursive-include rocotoviewer/utils *.py
+recursive-include src *.py

@@ -1,34 +1,22 @@
 # RocotoViewer
 
-A powerful viewer for Rocoto workflow management systems, providing real-time monitoring and visualization of workflow states.
+RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time.
 
 ## Features
 
-- Real-time workflow state visualization
-- Interactive log viewing and filtering
-- Workflow dependency graph display
-- Task status monitoring
-- Configuration management
-- Command-line interface for automation
+- **Real-time Monitoring**: View the status of your Rocoto tasks and cycles in a hierarchical tree and table view.
+- **Workflow Inspection**: Quickly see task states, exit statuses, and durations.
+- **Modern TUI**: Built with [Textual](https://textual.textualize.io/) for a smooth and responsive terminal experience.
+- **Easy Integration**: Simple command-line interface for specifying workflows and databases.
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - pip package manager
 
-### Installing from PyPI (Recommended)
-
-The easiest way to install RocotoViewer is from PyPI:
-
-```bash
-pip install rocotoviewer
-```
-
-### Installing from Source
-
-To install from source:
+### From Source
 
 1. Clone the repository:
    ```bash
@@ -36,104 +24,26 @@ To install from source:
    cd rocotoviewer
    ```
 
-2. Install the package in development mode:
+2. Install the package:
    ```bash
-   pip install -e .
+   pip install .
    ```
-
-Or install the package normally:
-```bash
-pip install .
-```
-
-### Installing Development Dependencies
-
-To install development dependencies:
-```bash
-pip install -e ".[dev]"
-```
 
 ## Usage
 
-### Command Line Interface
+Start RocotoViewer by providing the workflow XML and the database file:
 
 ```bash
-# Basic usage
-rocotoviewer --config /path/to/config.yaml
-
-# View workflow
-rocotoviewer view --workflow /path/to/workflow.xml
-
-# Monitor workflow directory
-rocotoviewer monitor --directory /path/to/workflows/
+rocotoviewer -w my_workflow.xml -d my_database.db
 ```
 
-### As a library
+## Key Bindings
 
-```python
-from rocotoviewer.ui.app import RocotoViewerApp
-
-app = RocotoViewerApp()
-app.run()
-```
-
-## Configuration
-
-Create a configuration file to specify workflow locations, display preferences, and other settings:
-
-```yaml
-workflows:
-  - path: "/path/to/workflow.xml"
-    name: "Production Workflow"
-    monitor: true
-
-display:
-  theme: "default"
-  refresh_interval: 5
-  max_log_lines: 1000
-
-logging:
-  level: "INFO"
-  file: "/path/to/logfile.log"
-```
-
-## Development
-
-### Setup
-
-```bash
-git clone https://github.com/rocotoviewer/rocotoviewer.git
-cd rocotoviewer
-pip install -e ".[dev]"
-```
-
-### Run tests
-
-```bash
-pytest
-```
-
-### Build documentation
-
-```bash
-pip install -e ".[docs]"
-mkdocs serve
-```
-
-## Verifying Installation
-
-To verify that RocotoViewer was installed correctly:
-
-```bash
-rocotoviewer --version
-```
-
-This should print the version of RocotoViewer that was installed.
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for more details.
+| Key | Action |
+| --- | --- |
+| `q` | Quit the application |
+| `r` | Refresh the workflow status |
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Apache-2.0
