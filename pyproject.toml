@@ -1,3 +1,5 @@
+# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -24,6 +26,11 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pip-tools",
+]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
 ]
 
 [project.scripts]
