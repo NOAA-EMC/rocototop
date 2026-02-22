@@ -37,6 +37,7 @@ def test_metatask_expansion(tmp_path):
     assert "ensemble" in parser.metatask_list
     assert len(parser.metatask_list["ensemble"]) == 4
 
+
 def test_parallel_vars_expansion(tmp_path):
     workflow_file = tmp_path / "workflow.xml"
     db_file = tmp_path / "rocoto.db"

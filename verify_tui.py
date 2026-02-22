@@ -30,14 +30,8 @@ async def take_screenshot():
         "jobid TEXT)"
     )
     c.execute("DELETE FROM jobs")
-    c.execute(
-        "INSERT INTO jobs VALUES ('post_01', 1672531200, 'SUCCEEDED', 0, 100, 1, "
-        "'12345')"
-    )
-    c.execute(
-        "INSERT INTO jobs VALUES ('post_02', 1672531200, 'RUNNING', NULL, 50, 1, "
-        "'12346')"
-    )
+    c.execute("INSERT INTO jobs VALUES ('post_01', 1672531200, 'SUCCEEDED', 0, 100, 1, '12345')")
+    c.execute("INSERT INTO jobs VALUES ('post_02', 1672531200, 'RUNNING', NULL, 50, 1, '12346')")
     conn.commit()
     conn.close()
 

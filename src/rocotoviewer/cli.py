@@ -1,6 +1,7 @@
 """
 .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,9 +17,7 @@ def main() -> None:
 
     This function parses command-line arguments and launches the Textual application.
     """
-    parser = argparse.ArgumentParser(
-        description="RocotoViewer — Textual interface to Rocoto"
-    )
+    parser = argparse.ArgumentParser(description="RocotoViewer — Textual interface to Rocoto")
     parser.add_argument(
         "-w",
         "--workflow",

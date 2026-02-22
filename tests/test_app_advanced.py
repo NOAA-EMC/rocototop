@@ -10,9 +10,7 @@ from rocotoviewer.app import RocotoApp
 def mock_advanced_files(tmp_path):
     wf = tmp_path / "wf.xml"
     db = tmp_path / "db.db"
-    wf.write_text(
-        """<workflow><task name="t1"><command>cmd</command></task></workflow>"""
-    )
+    wf.write_text("""<workflow><task name="t1"><command>cmd</command></task></workflow>""")
     conn = sqlite3.connect(db)
     conn.execute("CREATE TABLE cycles (cycle INTEGER)")
     conn.execute("INSERT INTO cycles VALUES (202301010000)")
@@ -20,9 +18,7 @@ def mock_advanced_files(tmp_path):
         "CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, "
         "exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)"
     )
-    conn.execute(
-        "INSERT INTO jobs VALUES ('t1', 202301010000, 'SUCCEEDED', 0, 10, 1, '123')"
-    )
+    conn.execute("INSERT INTO jobs VALUES ('t1', 202301010000, 'SUCCEEDED', 0, 10, 1, '123')")
     conn.commit()
     conn.close()
     return str(wf), str(db)

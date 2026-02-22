@@ -7,6 +7,7 @@ def test_parser_missing_files():
     assert parser.tasks_ordered == []
     assert parser.get_status() == []
 
+
 def test_parser_invalid_xml(tmp_path):
     wf = tmp_path / "invalid.xml"
     wf.write_text("invalid xml")
@@ -14,11 +15,13 @@ def test_parser_invalid_xml(tmp_path):
     parser.parse_workflow()
     assert parser.tasks_ordered == []
 
+
 def test_parser_invalid_db(tmp_path):
     db = tmp_path / "invalid.db"
     db.write_text("not a sqlite db")
     parser = RocotoParser("wf", str(db))
     assert parser.get_status() == []
+
 
 def test_parser_parse_cycle_edge_cases():
     parser = RocotoParser("wf", "db")
@@ -28,6 +31,7 @@ def test_parser_parse_cycle_edge_cases():
     assert parser._parse_cycle(100) == "197001010001"
     # Negative int (invalid timestamp)
     assert parser._parse_cycle(-1) == "-1"
+
 
 def test_entity_parsing(tmp_path):
     wf = tmp_path / "entities.xml"

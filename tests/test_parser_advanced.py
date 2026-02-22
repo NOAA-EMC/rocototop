@@ -14,8 +14,9 @@ def test_resolve_cyclestr():
 
     # Test multiple
     text = "Log: <cyclestr>@Y@m@d</cyclestr> Cmd: <cyclestr offset='1:00'>@H</cyclestr>"
-    assert parser.resolve_cyclestr(text, cycle) == "Log: 20230101 Cmd: 00" # 1:00 is 1 min, so Hour remains 00
+    assert parser.resolve_cyclestr(text, cycle) == "Log: 20230101 Cmd: 00"  # 1:00 is 1 min, so Hour remains 00
     assert parser.resolve_cyclestr("Hour: <cyclestr offset='01:00:00'>@H</cyclestr>", cycle) == "Hour: 01"
+
 
 def test_entity_substitution_in_xml(tmp_path):
     wf = tmp_path / "wf.xml"

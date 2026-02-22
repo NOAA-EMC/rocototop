@@ -33,10 +33,7 @@ async def take_screenshot():
         "CREATE TABLE jobs (taskname TEXT, cycle INTEGER, state TEXT, "
         "exit_status INTEGER, duration INTEGER, tries INTEGER, jobid TEXT)"
     )
-    c.execute(
-        "INSERT INTO jobs VALUES ('post_proc', 1672531200, 'RUNNING', NULL, 3600, 1, "
-        "'88888')"
-    )
+    c.execute("INSERT INTO jobs VALUES ('post_proc', 1672531200, 'RUNNING', NULL, 3600, 1, '88888')")
     conn.commit()
     conn.close()
 

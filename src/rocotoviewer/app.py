@@ -1,6 +1,7 @@
 """
 .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -89,14 +90,14 @@ class RocotoApp(App[None]):
                 Input(placeholder="Filter tasks by name...", id="filter_input"),
                 DataTable(id="status_table", cursor_type="row"),
                 Static("Select a task to see details", id="details_panel"),
-                id="main_content"
+                id="main_content",
             ),
         )
         yield Footer()
 
     def on_mount(self) -> None:
         """Handle application mount event."""
-        self.set_interval(30, self.action_refresh) # Auto-refresh every 30 seconds
+        self.set_interval(30, self.action_refresh)  # Auto-refresh every 30 seconds
         self.action_refresh()
 
     @work(thread=True)
@@ -152,7 +153,7 @@ class RocotoApp(App[None]):
                     str(task["exit"] if task["exit"] is not None else "-"),
                     str(task["tries"]),
                     str(task["duration"] or "-"),
-                    key=row_key
+                    key=row_key,
                 )
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -191,16 +192,10 @@ class RocotoApp(App[None]):
         stderr = self.parser.resolve_cyclestr(details.get("stderr", ""), cycle)
         join = self.parser.resolve_cyclestr(details.get("join", ""), cycle)
 
-        exit_str = task['exit'] if task['exit'] is not None else '-'
+        exit_str = task["exit"] if task["exit"] is not None else "-"
         content = f"[bold]Task:[/bold] {task['task']}  [bold]Cycle:[/bold] {cycle}\n"
-        content += (
-            f"[bold]State:[/bold] {task['state']}  "
-            f"[bold]Job ID:[/bold] {task['jobid'] or '-'}\n"
-        )
-        content += (
-            f"[bold]Exit Status:[/bold] {exit_str}  "
-            f"[bold]Tries:[/bold] {task['tries']}\n"
-        )
+        content += f"[bold]State:[/bold] {task['state']}  [bold]Job ID:[/bold] {task['jobid'] or '-'}\n"
+        content += f"[bold]Exit Status:[/bold] {exit_str}  [bold]Tries:[/bold] {task['tries']}\n"
         content += f"[bold]Duration:[/bold] {task['duration'] or '-'}\n"
         content += "-" * 40 + "\n"
         content += f"[bold]Command:[/bold] {command}\n"
@@ -224,10 +219,7 @@ class RocotoApp(App[None]):
         if deps := details.get("dependencies"):
             content += "[bold]Dependencies:[/bold]\n"
             for dep in deps:
-                content += (
-                    f"  - {dep['type']}: {dep.get('attrib', {})} "
-                    f"{dep.get('text', '')}\n"
-                )
+                content += f"  - {dep['type']}: {dep.get('attrib', {})} {dep.get('text', '')}\n"
 
         panel.update(content)
 
@@ -258,6 +250,7 @@ class RocotoApp(App[None]):
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) < 3:
         print("Usage: rocotoviewer -w <workflow.xml> -d <database.db>")
         sys.exit(1)
