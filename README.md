@@ -5,6 +5,7 @@ RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monit
 ## Features
 
 - **Real-time Monitoring**: View the status of your Rocoto tasks and cycles in a hierarchical tree and table view.
+- **Log Tailing**: View and follow task logs in real-time within the TUI.
 - **Workflow Inspection**: Quickly see task states, exit statuses, and durations.
 - **Modern TUI**: Built with [Textual](https://textual.textualize.io/) for a smooth and responsive terminal experience.
 - **Easy Integration**: Simple command-line interface for specifying workflows and databases.
@@ -43,6 +44,8 @@ rocotoviewer -w my_workflow.xml -d my_database.db
 | --- | --- |
 | `q` | Quit the application |
 | `r` | Refresh the workflow status |
+| `l` | Toggle Log Panel |
+| `f` | Toggle Log Follow mode |
 
 ## License
 

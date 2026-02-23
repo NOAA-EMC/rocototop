@@ -4,13 +4,15 @@
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
+from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static, Tree
 
 from rocotoviewer.parser import RocotoParser
 
@@ -73,13 +75,70 @@ class RocotoApp(App[None]):
         Binding("b", "boot", "Boot Task", show=True),
         Binding("w", "rewind", "Rewind Task", show=True),
         Binding("c", "complete", "Mark Complete", show=True),
+        Binding("l", "toggle_log", "Toggle Log", show=True),
+        Binding("f", "toggle_follow", "Follow Log", show=True),
     ]
+
+    CSS = """
+    Screen {
+        background: $surface;
+    }
+
+    #sidebar {
+        width: 25%;
+        height: 100%;
+        border-right: solid $primary;
+    }
+
+    #main_content {
+        width: 75%;
+        height: 100%;
+    }
+
+    #filter_input {
+        margin: 1;
+    }
+
+    DataTable {
+        height: 40%;
+    }
+
+    #details_panel {
+        height: 30%;
+        border-top: double $primary;
+        padding: 1;
+        background: $surface;
+        overflow-y: scroll;
+    }
+
+    #log_panel {
+        height: 30%;
+        border-top: double $secondary;
+        background: $surface;
+        display: none;
+    }
+
+    #status_bar {
+        height: 1;
+        background: $primary;
+        color: $text;
+        padding-left: 1;
+    }
+
+    .bold {
+        text-style: bold;
+        color: $accent;
+    }
+    """
 
     def __init__(self, workflow_file: str, database_file: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.parser: RocotoParser = RocotoParser(workflow_file, database_file)
         self.all_data: list[dict[str, Any]] = []
         self.last_selected_task: dict[str, Any] | None = None
+        self.last_selected_cycle: str | None = None
+        self.log_follow: bool = True
+        self.current_log_file: str | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
@@ -90,9 +149,11 @@ class RocotoApp(App[None]):
                 Input(placeholder="Filter tasks by name...", id="filter_input"),
                 DataTable(id="status_table", cursor_type="row"),
                 Static("Select a task to see details", id="details_panel"),
+                RichLog(id="log_panel", highlight=True, markup=False),
                 id="main_content",
             ),
         )
+        yield Static("Path: Workflow", id="status_bar")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -113,36 +174,60 @@ class RocotoApp(App[None]):
             self.call_from_thread(self.notify, f"Error refreshing data: {e}", severity="error")
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Handle filter input changes."""
+        """
+        Handle filter input changes.
+
+        Parameters
+        ----------
+        event : Input.Changed
+            The input change event.
+        """
         self._update_ui()
 
     def _update_ui(self) -> None:
-        """Update UI widgets with new data."""
+        """
+        Update UI widgets with new data.
+        """
         filter_text = self.query_one("#filter_input", Input).value.lower()
 
         tree = self.query_one("#cycle_tree", Tree)
-        tree.clear()
-        tree.root.expand()
+        # To preserve expansion state, we'll track existing nodes
+        existing_cycles = {str(node.label): node for node in tree.root.children}
 
         table = self.query_one("#status_table", DataTable)
-        # Store current scroll position if possible?
-        # Textual DataTable clear might lose it.
         table.clear(columns=True)
         table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
 
         for cycle_info in self.all_data:
             cycle_str = cycle_info["cycle"]
-            cycle_node = None
+            cycle_node = existing_cycles.get(cycle_str)
+
+            # If cycle node doesn't exist, create it.
+            # We don't expand by default anymore as per "when selected expanded"
+            if cycle_node is None:
+                cycle_node = tree.root.add(cycle_str, expand=False)
+
+            # Clear children of cycle node to refresh tasks (easier than matching)
+            # but this might lose selection if a task was selected.
+            # However, selecting a task is usually done in the table.
+            cycle_node.remove_children()
 
             for task in cycle_info["tasks"]:
                 task_name = task["task"]
                 if filter_text and filter_text not in task_name.lower():
                     continue
 
-                if cycle_node is None:
-                    cycle_node = tree.root.add(cycle_str, expand=True)
-
-                cycle_node.add_leaf(task_name)
+                state = task["state"]
+                if state == "SUCCEEDED":
+                    state_color = "green"
+                elif state == "RUNNING":
+                    state_color = "yellow"
+                elif state == "FAILED":
+                    state_color = "red"
+                else:
+                    state_color = "white"
+                leaf = cycle_node.add_leaf(f"{task_name} [{state_color}]{state}[/{state_color}]")
+                leaf.data = task_name
 
                 row_key = f"{cycle_str}:{task_name}"
                 table.add_row(
@@ -156,8 +241,55 @@ class RocotoApp(App[None]):
                     key=row_key,
                 )
 
+            # If no tasks visible for this cycle (due to filter), maybe hide cycle node?
+            # For now, we'll keep it.
+
+    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        """
+        Handle tree node selection to expand or show details.
+
+        Parameters
+        ----------
+        event : Tree.NodeSelected
+            The tree node selection event.
+        """
+        node = event.node
+        if node.is_root:
+            return
+
+        if node.allow_expand:
+            # Tree already toggles on select/enter for branch nodes in recent Textual
+            # but we want to ensure it expands as requested.
+            node.expand()
+            self.query_one("#status_bar", Static).update(f"Path: Workflow > {node.label}")
+        else:
+            # Task leaf node
+            task_name = node.data
+            cycle_str = str(node.parent.label)
+
+            # Find the task in all_data
+            for cycle_info in self.all_data:
+                if cycle_info["cycle"] == cycle_str:
+                    for task in cycle_info["tasks"]:
+                        if task["task"] == task_name:
+                            self.last_selected_task = task
+                            self.last_selected_cycle = cycle_str
+                            self.query_one("#status_bar", Static).update(f"Path: Workflow > {cycle_str} > {task_name}")
+                            self._display_details(task, cycle_str)
+                            if self.query_one("#log_panel").display:
+                                self._update_log()
+                            break
+                    break
+
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Handle row selection to show details."""
+        """
+        Handle row selection to show details.
+
+        Parameters
+        ----------
+        event : DataTable.RowSelected
+            The data table row selection event.
+        """
         row_key_obj = event.row_key
         if not row_key_obj or row_key_obj.value is None:
             return
@@ -180,10 +312,23 @@ class RocotoApp(App[None]):
 
         if selected_task:
             self.last_selected_task = selected_task
+            self.last_selected_cycle = cycle_str
+            self.query_one("#status_bar", Static).update(f"Path: Workflow > {cycle_str} > {selected_task['task']}")
             self._display_details(selected_task, cycle_str)
+            if self.query_one("#log_panel").display:
+                self._update_log()
 
     def _display_details(self, task: dict[str, Any], cycle: str) -> None:
-        """Display task details in the panel."""
+        """
+        Display task details in the panel.
+
+        Parameters
+        ----------
+        task : dict[str, Any]
+            The task data.
+        cycle : str
+            The cycle string.
+        """
         panel = self.query_one("#details_panel", Static)
         details = task.get("details", {})
 
@@ -224,7 +369,9 @@ class RocotoApp(App[None]):
         panel.update(content)
 
     def action_boot(self) -> None:
-        """Placeholder for rocotoboot."""
+        """
+        Placeholder for rocotoboot.
+        """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
             self.notify(f"Booting task: {task_name} (Mock Action)")
@@ -232,7 +379,9 @@ class RocotoApp(App[None]):
             self.notify("No task selected", severity="warning")
 
     def action_rewind(self) -> None:
-        """Placeholder for rocotorewind."""
+        """
+        Placeholder for rocotorewind.
+        """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
             self.notify(f"Rewinding task: {task_name} (Mock Action)")
@@ -240,12 +389,87 @@ class RocotoApp(App[None]):
             self.notify("No task selected", severity="warning")
 
     def action_complete(self) -> None:
-        """Placeholder for rocotocomplete."""
+        """
+        Placeholder for rocotocomplete.
+        """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
             self.notify(f"Marking task complete: {task_name} (Mock Action)")
         else:
             self.notify("No task selected", severity="warning")
+
+    def action_toggle_log(self) -> None:
+        """
+        Toggle the log panel visibility.
+        """
+        log_panel = self.query_one("#log_panel", RichLog)
+        log_panel.display = not log_panel.display
+        if log_panel.display:
+            self._update_log()
+
+    def action_toggle_follow(self) -> None:
+        """
+        Toggle log follow mode.
+        """
+        self.log_follow = not self.log_follow
+        self.notify(f"Log follow: {'ON' if self.log_follow else 'OFF'}")
+
+    def _update_log(self) -> None:
+        """
+        Initialize log reading for the selected task.
+        """
+        if not self.last_selected_task or not self.last_selected_cycle:
+            return
+
+        log_panel = self.query_one("#log_panel", RichLog)
+        log_panel.clear()
+
+        details = self.last_selected_task.get("details", {})
+        log_file = self.parser.resolve_cyclestr(details.get("join") or details.get("stdout") or "", self.last_selected_cycle)
+
+        if not log_file:
+            log_panel.write("No log file defined for this task.")
+            self.current_log_file = None
+            return
+
+        if not os.path.exists(log_file):
+            log_panel.write(f"Log file not found: {log_file}")
+            self.current_log_file = None
+            return
+
+        self.current_log_file = log_file
+        self.tail_log(log_file)
+
+    @work(thread=True, exclusive=True)
+    def tail_log(self, log_file: str) -> None:
+        """
+        Tail the log file in a background thread.
+
+        Parameters
+        ----------
+        log_file : str
+            The path to the log file.
+        """
+        log_panel = self.query_one("#log_panel", RichLog)
+        try:
+            with open(log_file, encoding="utf-8", errors="replace") as f:
+                # Read last 100 lines initially?
+                # For now, let's just read from the beginning if it's small or just the end.
+                # Let's read the whole file if it's reasonable.
+                content = f.read()
+                self.call_from_thread(log_panel.write, content)
+
+                while self.current_log_file == log_file and self.is_running:
+                    line = f.readline()
+                    if line:
+                        self.call_from_thread(log_panel.write, line.rstrip())
+                        if self.log_follow:
+                            self.call_from_thread(log_panel.scroll_end)
+                    else:
+                        time.sleep(0.1)
+        except Exception as e:
+            if self.is_running:
+                self.call_from_thread(self.notify, f"Error reading log: {e}", severity="error")
 
 
 if __name__ == "__main__":
