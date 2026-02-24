@@ -41,6 +41,11 @@ class RocotoApp(App[None]):
         Additional keyword arguments passed to the Textual App constructor.
     """
 
+    REFRESH_INTERVAL = 30
+    SIDEBAR_WIDTH = "25%"
+    MAIN_CONTENT_WIDTH = "75%"
+    STATUS_TABLE_HEIGHT = "15%"
+
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
@@ -51,56 +56,56 @@ class RocotoApp(App[None]):
         Binding("f", "toggle_follow", "Follow Log", show=True),
     ]
 
-    CSS = """
-    Screen {
+    CSS = f"""
+    Screen {{
         background: $surface;
-    }
+    }}
 
-    #sidebar {
-        width: 25%;
+    #sidebar {{
+        width: {SIDEBAR_WIDTH};
         height: 100%;
         border-right: solid $primary;
-    }
+    }}
 
-    #main_content {
-        width: 75%;
+    #main_content {{
+        width: {MAIN_CONTENT_WIDTH};
         height: 100%;
-    }
+    }}
 
-    #filter_input {
+    #filter_input {{
         margin: 1;
-    }
+    }}
 
-    #selected_task_status {
-        height: 15%;
+    #selected_task_status {{
+        height: {STATUS_TABLE_HEIGHT};
         border-bottom: solid $primary;
-    }
+    }}
 
-    TabbedContent {
+    TabbedContent {{
         height: 85%;
-    }
+    }}
 
-    #details_panel {
+    #details_panel {{
         padding: 1;
         background: $surface;
         overflow-y: scroll;
-    }
+    }}
 
-    #log_panel {
+    #log_panel {{
         height: 1fr;
-    }
+    }}
 
-    #status_bar {
+    #status_bar {{
         height: 1;
         background: $primary;
         color: $text;
         padding-left: 1;
-    }
+    }}
 
-    .bold {
+    .bold {{
         text-style: bold;
         color: $accent;
-    }
+    }}
     """
 
     def __init__(self, workflow_file: str, database_file: str, **kwargs: Any) -> None:
@@ -113,7 +118,14 @@ class RocotoApp(App[None]):
         self.current_log_file: str | None = None
 
     def compose(self) -> ComposeResult:
-        """Compose the UI layout."""
+        """
+        Compose the UI layout.
+
+        Returns
+        -------
+        ComposeResult
+            The layout components.
+        """
         yield Header(show_clock=True)
         with Horizontal():
             with Container(id="sidebar"):
@@ -130,13 +142,30 @@ class RocotoApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Handle application mount event."""
-        self.set_interval(30, self.action_refresh)  # Auto-refresh every 30 seconds
+        """
+        Handle application mount event.
+
+        Starts the auto-refresh interval and performs an initial refresh.
+
+        Returns
+        -------
+        None
+        """
+        self.set_interval(self.REFRESH_INTERVAL, self.action_refresh)  # Auto-refresh
         self.action_refresh()
 
     @work(thread=True)
     def action_refresh(self) -> None:
-        """Perform background refresh of data."""
+        """
+        Perform background refresh of data.
+
+        This worker parses the workflow XML and queries the database
+        in a separate thread to avoid blocking the UI.
+
+        Returns
+        -------
+        None
+        """
         try:
             # We don't notify on auto-refresh to avoid being annoying
             # self.call_from_thread(self.notify, "Refreshing data...")
@@ -154,12 +183,22 @@ class RocotoApp(App[None]):
         ----------
         event : Input.Changed
             The input change event.
+
+        Returns
+        -------
+        None
         """
         self._update_ui()
 
     def _update_ui(self) -> None:
         """
         Update UI widgets with new data.
+
+        Refreshes the cycle tree and updates details if a task is selected.
+
+        Returns
+        -------
+        None
         """
         with self.batch_update():
             filter_text = self.query_one("#filter_input", Input).value.lower()
@@ -205,7 +244,19 @@ class RocotoApp(App[None]):
                         break
 
     def _get_state_icon(self, state: str) -> str:
-        """Get icon for task state."""
+        """
+        Get icon for task state.
+
+        Parameters
+        ----------
+        state : str
+            The task state string.
+
+        Returns
+        -------
+        str
+            The icon emoji.
+        """
         if state == "SUCCEEDED":
             return "✅"
         elif state == "RUNNING":
@@ -221,7 +272,19 @@ class RocotoApp(App[None]):
         return "❓"
 
     def _get_state_color(self, state: str) -> str:
-        """Get color for task state."""
+        """
+        Get color for task state.
+
+        Parameters
+        ----------
+        state : str
+            The task state string.
+
+        Returns
+        -------
+        str
+            The color name.
+        """
         if state == "SUCCEEDED":
             return "green"
         elif state == "RUNNING":
@@ -244,6 +307,10 @@ class RocotoApp(App[None]):
         ----------
         event : Tree.NodeSelected
             The tree node selection event.
+
+        Returns
+        -------
+        None
         """
         node = event.node
         if node.is_root:
@@ -273,6 +340,15 @@ class RocotoApp(App[None]):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """
         Handle row selection in the status table.
+
+        Parameters
+        ----------
+        event : DataTable.RowSelected
+            The data table row selection event.
+
+        Returns
+        -------
+        None
         """
         # In this version, the table only has one row for the selected task,
         # so selecting it doesn't change much, but we'll keep the handler.
@@ -288,6 +364,10 @@ class RocotoApp(App[None]):
             The task data.
         cycle : str
             The cycle string.
+
+        Returns
+        -------
+        None
         """
         # Update simplified status table
         table = self.query_one("#selected_task_status", DataTable)
@@ -352,6 +432,10 @@ class RocotoApp(App[None]):
     def action_boot(self) -> None:
         """
         Placeholder for rocotoboot.
+
+        Returns
+        -------
+        None
         """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
@@ -362,6 +446,10 @@ class RocotoApp(App[None]):
     def action_rewind(self) -> None:
         """
         Placeholder for rocotorewind.
+
+        Returns
+        -------
+        None
         """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
@@ -372,6 +460,10 @@ class RocotoApp(App[None]):
     def action_complete(self) -> None:
         """
         Placeholder for rocotocomplete.
+
+        Returns
+        -------
+        None
         """
         if self.last_selected_task:
             task_name = self.last_selected_task["task"]
@@ -382,6 +474,10 @@ class RocotoApp(App[None]):
     def action_toggle_log(self) -> None:
         """
         Toggle between Details and Log tabs.
+
+        Returns
+        -------
+        None
         """
         tabbed_content = self.query_one(TabbedContent)
         if tabbed_content.active == "log_tab":
@@ -392,6 +488,10 @@ class RocotoApp(App[None]):
     def action_toggle_follow(self) -> None:
         """
         Toggle log follow mode.
+
+        Returns
+        -------
+        None
         """
         self.log_follow = not self.log_follow
         self.notify(f"Log follow: {'ON' if self.log_follow else 'OFF'}")
@@ -399,6 +499,10 @@ class RocotoApp(App[None]):
     def _update_log(self) -> None:
         """
         Initialize log reading for the selected task.
+
+        Returns
+        -------
+        None
         """
         if not self.last_selected_task or not self.last_selected_cycle:
             return
@@ -431,6 +535,10 @@ class RocotoApp(App[None]):
         ----------
         log_file : str
             The path to the log file.
+
+        Returns
+        -------
+        None
         """
         log_panel = self.query_one("#log_panel", RichLog)
         try:

@@ -47,7 +47,7 @@ def test_entity_parsing(tmp_path):
 <workflow>
 </workflow>""")
     parser = RocotoParser(str(wf), "db")
-    entities = parser._get_entity_values()
+    entities = parser._get_entity_values(wf.read_text())
     assert entities["TEST"] == "value"
     assert entities["SYSTEM_TEST"] == "some_file"
 
