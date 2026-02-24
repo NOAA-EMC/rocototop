@@ -19,46 +19,52 @@ async def generate_assets():
 
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(1.0)
+        # Wait for data to load and UI to update
+        await pilot.pause(2.0)
 
         # 1. Collapsed View
         os.makedirs("screenshots", exist_ok=True)
         app.save_screenshot("screenshots/collapsed.svg")
         print("Saved screenshots/collapsed.svg")
 
-        # 2. Expanded View (12Z cycle expanded)
-        await pilot.press("down")
-        await pilot.press("down")
-        await pilot.press("enter")
-        await pilot.pause(0.5)
+        # 2. Expanded View (All cycles expanded)
+        tree = app.query_one("#cycle_tree")
+        for node in tree.root.children:
+            node.expand()
+        tree.root.expand()
+
+        await pilot.pause(1.0)
+
+        # Verify expansion
+        for node in tree.root.children:
+            print(f"Node {node.label} expanded: {node.is_expanded}")
+            for child in node.children:
+                print(f"  Child: {child.label}")
+
         app.save_screenshot("screenshots/overview.svg")
         print("Saved screenshots/overview.svg")
 
         # 3. Filtering Screenshot
         await pilot.click("#filter_input")
         await pilot.press(*"model")
-        await pilot.pause(0.5)
+        await pilot.pause(1.0)
         app.save_screenshot("screenshots/filtering.svg")
         print("Saved screenshots/filtering.svg")
 
         # Clear filter
         await pilot.click("#filter_input")
-        for _ in range(5):
-            await pilot.press("backspace")
-        await pilot.pause(0.2)
+        app.query_one("#filter_input").value = ""
+        await pilot.pause(0.5)
 
         # 4. Details and Log Screenshot
         await pilot.click("#status_table")
         await pilot.press("home")
-        # Cycle 00Z has 6 tasks.
-        # Cycle 12Z ingest is 7th row.
-        # Cycle 12Z run_model_A is 8th row (index 7).
         for _ in range(7):
             await pilot.press("down")
         await pilot.press("enter")
 
         await pilot.press("l")
-        await pilot.pause(0.5)
+        await pilot.pause(1.0)
         app.save_screenshot("screenshots/details_log.svg")
         print("Saved screenshots/details_log.svg")
 
