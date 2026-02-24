@@ -14,63 +14,89 @@ Open your terminal and run RocotoViewer pointing to your workflow files:
 rocotoviewer -w example_workflow.xml -d example_workflow.db
 ```
 
-![Overview](screenshots/overview.svg)
+When the application starts, you will see the **Cycle Tree** on the left with all cycles initially collapsed.
 
-## Step 2: Navigate to the Cycle
+![Initial Collapsed View](screenshots/collapsed.svg)
 
-In the sidebar on the left, you will see a list of cycles. Use your arrow keys or mouse to find the `202310271200` (the 12Z cycle) and select it (or press Enter) to expand it.
+## Step 2: Navigate and Expand Cycles
 
-The main table view will show all tasks for all cycles, but the tree on the left allows you to quickly see the hierarchy.
+The **Cycle Tree** allows you to navigate the hierarchy of your workflow.
+
+*   **Keyboard**: Use the `Up` and `Down` arrow keys to highlight a cycle. Press `Enter` to **expand** or **collapse** the selected cycle.
+*   **Mouse**: Click on a cycle name or the expansion icon next to it to toggle its state.
+
+Expand the `202310271200` (the 12Z cycle). You will see the tasks associated with that cycle appear underneath it, color-coded by their current state.
+
+![Expanded 12Z Cycle](screenshots/overview.svg)
 
 ## Step 3: Filter for the Failed Task
 
 In the main view, you see a list of tasks. You are looking for a task named `run_model_A`.
-Click on the "Filter tasks by name..." input box at the top and type `model`.
 
-![Filtering](screenshots/filtering.svg)
+1.  Press `Tab` to move focus to the **Filter Input** box at the top (or click it with your mouse).
+2.  Type `model`.
 
-The table will now only show tasks containing "model".
+![Filtering Tasks](screenshots/filtering.svg)
 
-## Step 4: Inspect the Failure
+The **Status Table** will now only show tasks containing "model" in their name, making it easier to find what you need across all cycles.
 
-Find the `run_model_A` task for the `202310271200` cycle in the table. You notice its state is `DEAD` and the exit status is `1`.
-Click on that row to select it.
+## Step 4: Inspect Task Details
 
-## Step 5: Check the Logs
+Find the `run_model_A` task for the `202310271200` cycle in the table. You notice its state is `DEAD`.
 
-Look at the Details Panel at the bottom. It shows the resolved path for `Stdout` and `Stderr`, as well as the command and dependencies.
+*   **Select**: Click on the row in the table or use arrow keys and press `Enter` to select it.
+*   **Observe**: The **Details Panel** at the bottom will populate with information specific to this task instance.
 
-Press `l` to toggle the **Log Panel**. If the log file exists, RocotoViewer will tail it in real-time.
+The Details Panel shows the **Resolved Command** and **Log Paths** (Stdout/Stderr). RocotoViewer automatically resolves `<cyclestr>` tags based on the selected cycle.
 
-![Details and Logs](screenshots/details_log.svg)
+## Step 5: View Live Logs
+
+If a task is running or has failed, you often want to see the output.
+
+1.  With the task selected, press `l` to toggle the **Log Panel**.
+2.  The panel will appear at the bottom, showing a live `tail` of the log file.
+
+![Log Viewer in Action](screenshots/details_log.svg)
 
 You can see the "Segmentation fault" error right in the TUI!
+*   Press `f` to toggle **Log Follow** mode (autoscroll to the bottom).
 
-## Step 6: Advanced Dependencies
+## Step 6: Explore Complex Dependencies
 
-RocotoViewer handles complex dependencies. In this example, the `post_process` task depends on both `run_model_A` and `run_model_B` being successful.
+RocotoViewer helps you visualize complex dependency logic. In our example, the `verify` task has a multi-part dependency:
 
 ```xml
-<task name="post_process" cycledefs="standard">
+<task name="verify" cycledefs="standard">
   <dependency>
     <and>
-      <taskdep task="run_model_A"/>
-      <taskdep task="run_model_B"/>
+      <taskdep task="archive"/>
+      <!-- Depends on archive from the PREVIOUS cycle -->
+      <taskdep task="archive">
+        <cycleoffset>-12:00:00</cycleoffset>
+      </taskdep>
     </and>
   </dependency>
 </task>
 ```
 
-The Details Panel will show these dependencies clearly when the task is selected.
+When you select the `verify` task, the **Details Panel** lists these dependencies, helping you understand why a task might be stuck in a `PENDING` state.
 
-## Step 7: Rewind and Retry
+## Step 7: TUI Navigation Cheat Sheet
 
-After fixing the underlying issue, you want to retry the task.
-With the `run_model_A` task still selected, press `w` to "Rewind" the task.
+| Key | Action | Context |
+| :--- | :--- | :--- |
+| `Up/Down` | Move Selection | Cycle Tree / Status Table |
+| `Enter` | Expand/Collapse or Select | Cycle Tree / Status Table |
+| `Tab` | Switch Focus | Between Tree, Filter, and Table |
+| `l` | Toggle Log Panel | Global |
+| `f` | Toggle Log Follow | While Log Panel is visible |
+| `r` | Manual Refresh | Global |
+| `q` | Quit | Global |
 
-*(Note: Currently, Rocoto actions are placeholders and will show a notification in the UI).*
+## Step 8: Rewind and Monitor
 
-## Step 8: Refresh and Monitor
+After fixing the underlying issue (e.g., fixing a data issue that caused the Segfault), you can signal Rocoto to retry.
 
-Press `r` to manually refresh and verify that the task state has changed (e.g., to `QUEUED` or `RUNNING`).
-Alternatively, just wait for the auto-refresh to kick in!
+With `run_model_A` selected, press `w` to "Rewind" the task. RocotoViewer will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `r` to see the state change to `QUEUED` or `RUNNING`.
+
+*(Note: In this demo version, actions show a notification in the UI).*

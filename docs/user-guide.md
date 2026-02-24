@@ -2,6 +2,8 @@
 
 This guide provides a detailed walkthrough of the RocotoViewer interface and its features.
 
+![RocotoViewer Interface](screenshots/collapsed.svg)
+
 ## Interface Overview
 
 RocotoViewer's interface is divided into three main sections:

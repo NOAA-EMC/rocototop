@@ -25,6 +25,7 @@ tasks_00 = [
     ("run_model_B", "SUCCEEDED", 0, 3500, 1, "1003"),
     ("post_process", "SUCCEEDED", 0, 600, 1, "1004"),
     ("archive", "SUCCEEDED", 0, 300, 1, "1005"),
+    ("verify", "SUCCEEDED", 0, 100, 1, "1006"),
 ]
 for t in tasks_00:
     c.execute("INSERT INTO jobs VALUES (?, 1698364800, ?, ?, ?, ?, ?)", t)
@@ -34,6 +35,7 @@ tasks_12 = [
     ("ingest", "SUCCEEDED", 0, 130, 1, "2001"),
     ("run_model_A", "DEAD", 1, 1500, 1, "2002"),
     ("run_model_B", "RUNNING", None, 1200, 1, "2003"),
+    ("verify", "PENDING", None, 0, 0, None),
 ]
 for t in tasks_12:
     c.execute("INSERT INTO jobs VALUES (?, 1698408000, ?, ?, ?, ?, ?)", t)

@@ -21,16 +21,20 @@ async def generate_assets():
     async with app.run_test() as pilot:
         await pilot.pause(1.0)
 
-        # 1. Overview Screenshot
+        # 1. Collapsed View
+        os.makedirs("screenshots", exist_ok=True)
+        app.save_screenshot("screenshots/collapsed.svg")
+        print("Saved screenshots/collapsed.svg")
+
+        # 2. Expanded View (12Z cycle expanded)
         await pilot.press("down")
         await pilot.press("down")
         await pilot.press("enter")
         await pilot.pause(0.5)
-        os.makedirs("screenshots", exist_ok=True)
         app.save_screenshot("screenshots/overview.svg")
         print("Saved screenshots/overview.svg")
 
-        # 2. Filtering Screenshot
+        # 3. Filtering Screenshot
         await pilot.click("#filter_input")
         await pilot.press(*"model")
         await pilot.pause(0.5)
@@ -43,10 +47,13 @@ async def generate_assets():
             await pilot.press("backspace")
         await pilot.pause(0.2)
 
-        # 3. Details and Log Screenshot
+        # 4. Details and Log Screenshot
         await pilot.click("#status_table")
         await pilot.press("home")
-        for _ in range(6):
+        # Cycle 00Z has 6 tasks.
+        # Cycle 12Z ingest is 7th row.
+        # Cycle 12Z run_model_A is 8th row (index 7).
+        for _ in range(7):
             await pilot.press("down")
         await pilot.press("enter")
 
