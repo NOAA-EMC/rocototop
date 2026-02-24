@@ -47,7 +47,19 @@ async def test_app_ui_loading(mock_rocoto_files):
         assert tree.root.children
         assert "202301010000" in str(tree.root.children[0].label)
 
-        table = app.query_one("#status_table", DataTable)
+        # Initially no task selected, so table should be empty or have no rows
+        table = app.query_one("#selected_task_status", DataTable)
+        assert table.row_count == 0
+
+        # Select a task in the tree
+        tree = app.query_one("#cycle_tree", Tree)
+        cycle_node = tree.root.children[0]
+        cycle_node.expand()
+        await pilot.pause(0.1)
+        task_node = cycle_node.children[0]
+        tree.select_node(task_node)
+        await pilot.pause(0.1)
+
         assert table.row_count == 1
         # Check if task1 is in the table (it should have an icon now)
         row = [str(cell) for cell in table.get_row_at(0)]

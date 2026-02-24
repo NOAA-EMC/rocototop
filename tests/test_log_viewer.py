@@ -1,7 +1,7 @@
 import sqlite3
 
 import pytest
-from textual.widgets import DataTable, RichLog
+from textual.widgets import RichLog
 
 from rocotoviewer.app import RocotoApp
 
@@ -47,15 +47,25 @@ async def test_log_viewer_toggle_and_content(mock_rocoto_with_logs):
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
 
-        # Toggle log viewer
-        await pilot.press("l")
-        log_panel = app.query_one("#log_panel", RichLog)
-        assert log_panel.display is True
+        # Toggle log viewer (switches tab)
+        from textual.widgets import TabbedContent
 
-        # Select task to load log
-        table = app.query_one(DataTable)
-        table.focus()
-        await pilot.press("enter")  # Select first row
+        tabbed_content = app.query_one(TabbedContent)
+        assert tabbed_content.active == "details_tab"
+        await pilot.press("l")
+        assert tabbed_content.active == "log_tab"
+
+        log_panel = app.query_one("#log_panel", RichLog)
+
+        # Select task from tree to load log
+        from textual.widgets import Tree
+
+        tree = app.query_one("#cycle_tree", Tree)
+        cycle_node = tree.root.children[0]
+        cycle_node.expand()
+        await pilot.pause(0.1)
+        task_node = cycle_node.children[0]
+        tree.select_node(task_node)
 
         await pilot.pause(0.5)
 

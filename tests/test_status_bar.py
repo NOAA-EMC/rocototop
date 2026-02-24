@@ -1,7 +1,7 @@
 import sqlite3
 
 import pytest
-from textual.widgets import DataTable, Static
+from textual.widgets import Static
 
 from rocotoviewer.app import RocotoApp
 
@@ -45,10 +45,15 @@ async def test_status_bar_path(mock_rocoto_data):
         status_bar = app.query_one("#status_bar", Static)
         assert "Path: Workflow" in str(status_bar.content)
 
-        # Select task in table
-        table = app.query_one(DataTable)
-        table.focus()
-        await pilot.press("enter")
+        # Select task in tree
+        from textual.widgets import Tree
+
+        tree = app.query_one("#cycle_tree", Tree)
+        cycle_node = tree.root.children[0]
+        cycle_node.expand()
+        await pilot.pause(0.1)
+        task_node = cycle_node.children[0]
+        tree.select_node(task_node)
 
         await pilot.pause(0.1)
 

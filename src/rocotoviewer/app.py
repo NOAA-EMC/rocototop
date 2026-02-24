@@ -12,7 +12,17 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static, Tree
+from textual.widgets import (
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    RichLog,
+    Static,
+    TabbedContent,
+    TabPane,
+    Tree,
+)
 
 from rocotoviewer.parser import RocotoParser
 
@@ -61,30 +71,19 @@ class RocotoApp(App[None]):
         margin: 1;
     }
 
-    DataTable {
-        height: 25%;
+    #selected_task_status {
+        height: 15%;
+        border-bottom: solid $primary;
+    }
+
+    TabbedContent {
+        height: 85%;
     }
 
     #details_panel {
-        height: 25%;
-        border-top: double $primary;
         padding: 1;
         background: $surface;
         overflow-y: scroll;
-    }
-
-    #log_container {
-        height: 50%;
-        border-top: double $secondary;
-        background: $surface;
-        display: none;
-    }
-
-    #log_header {
-        background: $secondary;
-        color: $text;
-        padding-left: 1;
-        height: 1;
     }
 
     #log_panel {
@@ -116,20 +115,17 @@ class RocotoApp(App[None]):
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
         yield Header(show_clock=True)
-        yield Horizontal(
-            Container(Tree("Cycles", id="cycle_tree"), id="sidebar"),
-            Vertical(
-                Input(placeholder="Filter tasks by name...", id="filter_input"),
-                DataTable(id="status_table", cursor_type="row"),
-                Static("Select a task to see details", id="details_panel"),
-                Vertical(
-                    Static(" [bold]Log Output[/bold]", id="log_header"),
-                    RichLog(id="log_panel", highlight=True, markup=False),
-                    id="log_container",
-                ),
-                id="main_content",
-            ),
-        )
+        with Horizontal():
+            with Container(id="sidebar"):
+                yield Tree("Cycles", id="cycle_tree")
+            with Vertical(id="main_content"):
+                yield Input(placeholder="Filter tasks by name...", id="filter_input")
+                yield DataTable(id="selected_task_status", cursor_type="row")
+                with TabbedContent():
+                    with TabPane("Details", id="details_tab"):
+                        yield Static("Select a task to see details", id="details_panel")
+                    with TabPane("Log", id="log_tab"):
+                        yield RichLog(id="log_panel", highlight=True, markup=False)
         yield Static("Path: Workflow", id="status_bar")
         yield Footer()
 
@@ -172,22 +168,15 @@ class RocotoApp(App[None]):
             # To preserve expansion state, we'll track existing nodes
             existing_cycles = {str(node.label): node for node in tree.root.children}
 
-            table = self.query_one("#status_table", DataTable)
-            table.clear(columns=True)
-            table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
-
             for cycle_info in self.all_data:
                 cycle_str = cycle_info["cycle"]
                 cycle_node = existing_cycles.get(cycle_str)
 
                 # If cycle node doesn't exist, create it.
-                # We don't expand by default anymore as per "when selected expanded"
                 if cycle_node is None:
                     cycle_node = tree.root.add(cycle_str, expand=False)
 
-                # Clear children of cycle node to refresh tasks (easier than matching)
-                # but this might lose selection if a task was selected.
-                # However, selecting a task is usually done in the table.
+                # Clear children of cycle node to refresh tasks
                 cycle_node.remove_children()
 
                 for task in cycle_info["tasks"]:
@@ -196,47 +185,56 @@ class RocotoApp(App[None]):
                         continue
 
                     state = task["state"]
-                    icon = ""
-                    if state == "SUCCEEDED":
-                        state_color = "green"
-                        icon = "✅"
-                    elif state == "RUNNING":
-                        state_color = "yellow"
-                        icon = "🏃"
-                    elif state == "FAILED":
-                        state_color = "red"
-                        icon = "❌"
-                    elif state == "DEAD":
-                        state_color = "red"
-                        icon = "💀"
-                    elif state == "QUEUED":
-                        state_color = "blue"
-                        icon = "🕒"
-                    elif state in ["WAITING", "PENDING"]:
-                        state_color = "white"
-                        icon = "⌛"
-                    else:
-                        state_color = "white"
-                        icon = "❓"
+                    icon = self._get_state_icon(state)
+                    state_color = self._get_state_color(state)
 
                     leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
                     leaf = cycle_node.add_leaf(leaf_label)
                     leaf.data = task_name
 
-                    row_key = f"{cycle_str}:{task_name}"
-                    table.add_row(
-                        cycle_str,
-                        f"{icon} {task_name}",
-                        str(task["jobid"] or "-"),
-                        f"[{state_color}]{state}[/{state_color}]",
-                        str(task["exit"] if task["exit"] is not None else "-"),
-                        str(task["tries"]),
-                        str(task["duration"] or "-"),
-                        key=row_key,
-                    )
+            # Refresh selected task status if one is selected
+            if self.last_selected_task and self.last_selected_cycle:
+                # Find the updated task data
+                for cycle_info in self.all_data:
+                    if cycle_info["cycle"] == self.last_selected_cycle:
+                        for task in cycle_info["tasks"]:
+                            if task["task"] == self.last_selected_task["task"]:
+                                self.last_selected_task = task
+                                self._display_details(task, self.last_selected_cycle)
+                                break
+                        break
 
-            # If no tasks visible for this cycle (due to filter), maybe hide cycle node?
-            # For now, we'll keep it.
+    def _get_state_icon(self, state: str) -> str:
+        """Get icon for task state."""
+        if state == "SUCCEEDED":
+            return "✅"
+        elif state == "RUNNING":
+            return "🏃"
+        elif state == "FAILED":
+            return "❌"
+        elif state == "DEAD":
+            return "💀"
+        elif state == "QUEUED":
+            return "🕒"
+        elif state in ["WAITING", "PENDING"]:
+            return "⌛"
+        return "❓"
+
+    def _get_state_color(self, state: str) -> str:
+        """Get color for task state."""
+        if state == "SUCCEEDED":
+            return "green"
+        elif state == "RUNNING":
+            return "yellow"
+        elif state == "FAILED":
+            return "red"
+        elif state == "DEAD":
+            return "red"
+        elif state == "QUEUED":
+            return "blue"
+        elif state in ["WAITING", "PENDING"]:
+            return "white"
+        return "white"
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """
@@ -252,8 +250,6 @@ class RocotoApp(App[None]):
             return
 
         if node.allow_expand:
-            # Tree already toggles on select/enter for branch nodes in recent Textual
-            # but we want to ensure it expands as requested.
             node.expand()
             self.query_one("#status_bar", Static).update(f"Path: Workflow > {node.label}")
         else:
@@ -270,51 +266,21 @@ class RocotoApp(App[None]):
                             self.last_selected_cycle = cycle_str
                             self.query_one("#status_bar", Static).update(f"Path: Workflow > {cycle_str} > {task_name}")
                             self._display_details(task, cycle_str)
-                            if self.query_one("#log_panel").display:
-                                self._update_log()
+                            self._update_log()
                             break
                     break
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """
-        Handle row selection to show details.
-
-        Parameters
-        ----------
-        event : DataTable.RowSelected
-            The data table row selection event.
+        Handle row selection in the status table.
         """
-        row_key_obj = event.row_key
-        if not row_key_obj or row_key_obj.value is None:
-            return
-
-        row_key = str(row_key_obj.value)
-        if ":" not in row_key:
-            return
-
-        cycle_str, task_name = row_key.split(":", 1)
-
-        selected_task = None
-        for cycle_info in self.all_data:
-            if cycle_info["cycle"] == cycle_str:
-                for task in cycle_info["tasks"]:
-                    if task["task"] == task_name:
-                        selected_task = task
-                        break
-                if selected_task:
-                    break
-
-        if selected_task:
-            self.last_selected_task = selected_task
-            self.last_selected_cycle = cycle_str
-            self.query_one("#status_bar", Static).update(f"Path: Workflow > {cycle_str} > {selected_task['task']}")
-            self._display_details(selected_task, cycle_str)
-            if self.query_one("#log_panel").display:
-                self._update_log()
+        # In this version, the table only has one row for the selected task,
+        # so selecting it doesn't change much, but we'll keep the handler.
+        pass
 
     def _display_details(self, task: dict[str, Any], cycle: str) -> None:
         """
-        Display task details in the panel.
+        Display task details and update simplified status.
 
         Parameters
         ----------
@@ -323,6 +289,27 @@ class RocotoApp(App[None]):
         cycle : str
             The cycle string.
         """
+        # Update simplified status table
+        table = self.query_one("#selected_task_status", DataTable)
+        if not table.columns:
+            table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
+        table.clear()
+
+        state = task["state"]
+        icon = self._get_state_icon(state)
+        state_color = self._get_state_color(state)
+
+        table.add_row(
+            cycle,
+            f"{icon} {task['task']}",
+            str(task["jobid"] or "-"),
+            f"[{state_color}]{state}[/{state_color}]",
+            str(task["exit"] if task["exit"] is not None else "-"),
+            str(task["tries"]),
+            str(task["duration"] or "-"),
+        )
+
+        # Update details panel
         panel = self.query_one("#details_panel", Static)
         details = task.get("details", {})
 
@@ -394,12 +381,13 @@ class RocotoApp(App[None]):
 
     def action_toggle_log(self) -> None:
         """
-        Toggle the log panel visibility.
+        Toggle between Details and Log tabs.
         """
-        container = self.query_one("#log_container", Vertical)
-        container.display = not container.display
-        if container.display:
-            self._update_log()
+        tabbed_content = self.query_one(TabbedContent)
+        if tabbed_content.active == "log_tab":
+            tabbed_content.active = "details_tab"
+        else:
+            tabbed_content.active = "log_tab"
 
     def action_toggle_follow(self) -> None:
         """
