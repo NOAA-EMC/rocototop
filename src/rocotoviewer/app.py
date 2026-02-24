@@ -62,22 +62,33 @@ class RocotoApp(App[None]):
     }
 
     DataTable {
-        height: 40%;
+        height: 25%;
     }
 
     #details_panel {
-        height: 30%;
+        height: 25%;
         border-top: double $primary;
         padding: 1;
         background: $surface;
         overflow-y: scroll;
     }
 
-    #log_panel {
-        height: 30%;
+    #log_container {
+        height: 50%;
         border-top: double $secondary;
         background: $surface;
         display: none;
+    }
+
+    #log_header {
+        background: $secondary;
+        color: $text;
+        padding-left: 1;
+        height: 1;
+    }
+
+    #log_panel {
+        height: 1fr;
     }
 
     #status_bar {
@@ -111,7 +122,11 @@ class RocotoApp(App[None]):
                 Input(placeholder="Filter tasks by name...", id="filter_input"),
                 DataTable(id="status_table", cursor_type="row"),
                 Static("Select a task to see details", id="details_panel"),
-                RichLog(id="log_panel", highlight=True, markup=False),
+                Vertical(
+                    Static(" [bold]Log Output[/bold]", id="log_header"),
+                    RichLog(id="log_panel", highlight=True, markup=False),
+                    id="log_container",
+                ),
                 id="main_content",
             ),
         )
@@ -381,9 +396,9 @@ class RocotoApp(App[None]):
         """
         Toggle the log panel visibility.
         """
-        log_panel = self.query_one("#log_panel", RichLog)
-        log_panel.display = not log_panel.display
-        if log_panel.display:
+        container = self.query_one("#log_container", Vertical)
+        container.display = not container.display
+        if container.display:
             self._update_log()
 
     def action_toggle_follow(self) -> None:

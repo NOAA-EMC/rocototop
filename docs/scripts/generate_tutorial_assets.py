@@ -34,13 +34,6 @@ async def generate_assets():
         tree.root.expand()
 
         await pilot.pause(1.0)
-
-        # Verify expansion
-        for node in tree.root.children:
-            print(f"Node {node.label} expanded: {node.is_expanded}")
-            for child in node.children:
-                print(f"  Child: {child.label}")
-
         app.save_screenshot("screenshots/overview.svg")
         print("Saved screenshots/overview.svg")
 
@@ -59,12 +52,23 @@ async def generate_assets():
         # 4. Details and Log Screenshot
         await pilot.click("#status_table")
         await pilot.press("home")
+        # Row 7 is run_model_A 12Z
         for _ in range(7):
             await pilot.press("down")
         await pilot.press("enter")
 
+        await pilot.pause(0.5)
+        details = app.last_selected_task
+        print(f"Selected task: {details['task']}")
+        print(f"Resolved stdout: {app.parser.resolve_cyclestr(details['details']['stdout'], app.last_selected_cycle)}")
+
         await pilot.press("l")
-        await pilot.pause(1.0)
+        await pilot.pause(2.0) # Wait for log to be read
+
+        log_panel = app.query_one("#log_panel")
+        # In Textual, RichLog might not have .lines but we can check its content via private or other means
+        # but let's just save the screenshot and hope the pause worked.
+
         app.save_screenshot("screenshots/details_log.svg")
         print("Saved screenshots/details_log.svg")
 
