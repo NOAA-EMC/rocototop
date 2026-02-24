@@ -286,58 +286,74 @@ class RocotoParser:
         name = element.attrib.get("name", NO_NAME)
         cycledefs = element.attrib.get("cycledefs", DEFAULT_CYCLE)
 
-        for v_name, v_val in vars_dict.items():
-            name = name.replace(f"#{v_name}#", v_val)
-            cycledefs = cycledefs.replace(f"#{v_name}#", v_val)
+        def resolve_vars(text: str) -> str:
+            if not text:
+                return text
+            for v_name, v_val in vars_dict.items():
+                text = text.replace(f"#{v_name}#", v_val)
+            return text
+
+        name = resolve_vars(name)
+        cycledefs = resolve_vars(cycledefs)
 
         task = RocotoTask(name, cycledefs)
 
+        def get_content(elem: ET.Element) -> str:
+            # Reconstruct the inner XML content including tags like <cyclestr>
+            content = elem.text or ""
+            for child in elem:
+                content += ET.tostring(child, encoding="unicode")
+            return content.strip()
+
         for sub in element:
             if sub.tag == "command":
-                task.command = (sub.text or "").strip()
+                task.command = resolve_vars(get_content(sub))
             elif sub.tag == "account":
-                task.account = (sub.text or "").strip()
+                task.account = resolve_vars(get_content(sub))
             elif sub.tag == "queue":
-                task.queue = (sub.text or "").strip()
+                task.queue = resolve_vars(get_content(sub))
             elif sub.tag == "walltime":
-                task.walltime = (sub.text or "").strip()
+                task.walltime = resolve_vars(get_content(sub))
             elif sub.tag == "memory":
-                task.memory = (sub.text or "").strip()
+                task.memory = resolve_vars(get_content(sub))
             elif sub.tag == "join":
-                task.join = (sub.text or "").strip()
+                task.join = resolve_vars(get_content(sub))
             elif sub.tag == "stdout":
-                task.stdout = (sub.text or "").strip()
+                task.stdout = resolve_vars(get_content(sub))
             elif sub.tag == "stderr":
-                task.stderr = (sub.text or "").strip()
+                task.stderr = resolve_vars(get_content(sub))
             elif sub.tag == "dependency":
-                task.dependencies = self._parse_deps(sub)
+                task.dependencies = self._parse_deps_with_vars(sub, resolve_vars)
 
         self.tasks_dict[name] = task
         self.tasks_ordered.append(name)
         for p_name in parent_metatasks:
             self.metatask_list[p_name].append(name)
 
-    def _parse_deps(self, element: ET.Element) -> list[dict[str, Any]]:
+    def _parse_deps_with_vars(self, element: ET.Element, resolve_vars: Any) -> list[dict[str, Any]]:
         """
-                Parse task dependencies recursively.
+        Parse task dependencies recursively, resolving variables.
 
-                Parameters
-                ----------
-                element : ET.Element
-                    The dependency XML element.
+        Parameters
+        ----------
+        element : ET.Element
+            The dependency XML element.
+        resolve_vars : Callable[[str], str]
+            Function to resolve variables in strings.
 
-                Returns
+        Returns
         -------
-                list[dict[str, Any]]
-                    A list of dependency dictionaries.
+        list[dict[str, Any]]
+            A list of dependency dictionaries.
         """
         deps = []
         for child in element:
-            dep = {"type": child.tag, "attrib": dict(child.attrib)}
+            attrib = {k: resolve_vars(v) for k, v in child.attrib.items()}
+            dep = {"type": child.tag, "attrib": attrib}
             if child.tag in ["and", "or", "not", "nand", "nor", "xor", "some"]:
-                dep["children"] = self._parse_deps(child)
+                dep["children"] = self._parse_deps_with_vars(child, resolve_vars)
             else:
-                dep["text"] = (child.text or "").strip()
+                dep["text"] = resolve_vars((child.text or "").strip())
             deps.append(dep)
         return deps
 

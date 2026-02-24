@@ -2,12 +2,14 @@
 
 This guide provides a detailed walkthrough of the RocotoViewer interface and its features.
 
+![RocotoViewer Interface](screenshots/overview.svg)
+
 ## Interface Overview
 
 RocotoViewer's interface is divided into three main sections:
 
-1.  **Sidebar (Cycle Tree)**: Displays a hierarchical view of workflow cycles and their tasks. Each cycle can be expanded to see its tasks with color-coded status.
-2.  **Status Table**: A central table showing all tasks for the selected cycle(s). It includes columns for Task name, Job ID, State, Exit code, Tries, and Duration.
+1.  **Sidebar (Cycle Tree)**: Displays a hierarchical view of workflow cycles and their tasks. Each cycle can be expanded to see its tasks with icons and color-coded status (e.g., ✅ for SUCCEEDED, 🏃 for RUNNING, 💀 for DEAD).
+2.  **Status Table**: A central table showing all tasks for the selected cycle(s). It includes columns for Task name (with state icons), Job ID, State, Exit code, Tries, and Duration.
 3.  **Details Panel**: Displays comprehensive information about the currently selected task, including command, log paths, and dependencies.
 4.  **Log Panel**: An optional panel (toggled with `l`) that shows a live tail of the selected task's log file.
 5.  **Status Bar**: Displays the "Path" to the currently selected item (e.g., Workflow > Cycle > Task).
@@ -28,6 +30,8 @@ RocotoViewer's interface is divided into three main sections:
 
 You can quickly find specific tasks using the filter input at the top of the main content area. Type any part of a task name to filter the visible rows in the Status Table.
 
+![Task Filtering](screenshots/filtering.svg)
+
 ## Auto-Refresh
 
 By default, RocotoViewer automatically refreshes the workflow status every 30 seconds. This ensures you have the latest information without manual intervention.
@@ -43,5 +47,7 @@ When you select a row in the Status Table, the Details Panel at the bottom updat
 ## Log Viewing
 
 RocotoViewer allows you to view task logs directly within the TUI. When a task is selected, you can press `l` to toggle the log panel. If the log file exists, it will be loaded and tailed in real-time.
+
+![Log Viewer](screenshots/details_log.svg)
 
 By default, **Follow mode** is enabled, meaning the view will automatically scroll as new content is added to the log. You can toggle this behavior by pressing `f`.

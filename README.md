@@ -2,6 +2,8 @@
 
 RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time.
 
+![Overview](docs/screenshots/overview.svg)
+
 ## Features
 
 - **Real-time Monitoring**: View the status of your Rocoto tasks and cycles in a hierarchical tree and table view.

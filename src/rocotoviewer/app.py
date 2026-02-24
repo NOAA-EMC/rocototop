@@ -62,22 +62,33 @@ class RocotoApp(App[None]):
     }
 
     DataTable {
-        height: 40%;
+        height: 25%;
     }
 
     #details_panel {
-        height: 30%;
+        height: 25%;
         border-top: double $primary;
         padding: 1;
         background: $surface;
         overflow-y: scroll;
     }
 
-    #log_panel {
-        height: 30%;
+    #log_container {
+        height: 50%;
         border-top: double $secondary;
         background: $surface;
         display: none;
+    }
+
+    #log_header {
+        background: $secondary;
+        color: $text;
+        padding-left: 1;
+        height: 1;
+    }
+
+    #log_panel {
+        height: 1fr;
     }
 
     #status_bar {
@@ -111,7 +122,11 @@ class RocotoApp(App[None]):
                 Input(placeholder="Filter tasks by name...", id="filter_input"),
                 DataTable(id="status_table", cursor_type="row"),
                 Static("Select a task to see details", id="details_panel"),
-                RichLog(id="log_panel", highlight=True, markup=False),
+                Vertical(
+                    Static(" [bold]Log Output[/bold]", id="log_header"),
+                    RichLog(id="log_panel", highlight=True, markup=False),
+                    id="log_container",
+                ),
                 id="main_content",
             ),
         )
@@ -181,23 +196,39 @@ class RocotoApp(App[None]):
                         continue
 
                     state = task["state"]
+                    icon = ""
                     if state == "SUCCEEDED":
                         state_color = "green"
+                        icon = "✅"
                     elif state == "RUNNING":
                         state_color = "yellow"
+                        icon = "🏃"
                     elif state == "FAILED":
                         state_color = "red"
+                        icon = "❌"
+                    elif state == "DEAD":
+                        state_color = "red"
+                        icon = "💀"
+                    elif state == "QUEUED":
+                        state_color = "blue"
+                        icon = "🕒"
+                    elif state in ["WAITING", "PENDING"]:
+                        state_color = "white"
+                        icon = "⌛"
                     else:
                         state_color = "white"
-                    leaf = cycle_node.add_leaf(f"{task_name} [{state_color}]{state}[/{state_color}]")
+                        icon = "❓"
+
+                    leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
+                    leaf = cycle_node.add_leaf(leaf_label)
                     leaf.data = task_name
 
                     row_key = f"{cycle_str}:{task_name}"
                     table.add_row(
                         cycle_str,
-                        task_name,
+                        f"{icon} {task_name}",
                         str(task["jobid"] or "-"),
-                        task["state"],
+                        f"[{state_color}]{state}[/{state_color}]",
                         str(task["exit"] if task["exit"] is not None else "-"),
                         str(task["tries"]),
                         str(task["duration"] or "-"),
@@ -365,9 +396,9 @@ class RocotoApp(App[None]):
         """
         Toggle the log panel visibility.
         """
-        log_panel = self.query_one("#log_panel", RichLog)
-        log_panel.display = not log_panel.display
-        if log_panel.display:
+        container = self.query_one("#log_container", Vertical)
+        container.display = not container.display
+        if container.display:
             self._update_log()
 
     def action_toggle_follow(self) -> None:

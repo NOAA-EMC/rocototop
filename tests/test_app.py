@@ -49,6 +49,6 @@ async def test_app_ui_loading(mock_rocoto_files):
 
         table = app.query_one("#status_table", DataTable)
         assert table.row_count == 1
-        # Check if task1 is in the table
-        row = table.get_row_at(0)
-        assert "task1" in row
+        # Check if task1 is in the table (it should have an icon now)
+        row = [str(cell) for cell in table.get_row_at(0)]
+        assert any("task1" in cell for cell in row)
