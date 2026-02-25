@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from typing import Any
 
@@ -45,6 +46,7 @@ class RocotoApp(App[None]):
     SIDEBAR_WIDTH = "25%"
     MAIN_CONTENT_WIDTH = "75%"
     STATUS_TABLE_HEIGHT = "15%"
+    MAX_LOG_READ_SIZE = 100_000  # 100KB
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
@@ -215,21 +217,34 @@ class RocotoApp(App[None]):
                 if cycle_node is None:
                     cycle_node = tree.root.add(cycle_str, expand=False)
 
-                # Clear children of cycle node to refresh tasks
-                cycle_node.remove_children()
+                # Track existing task nodes in this cycle
+                existing_tasks = {node.data: node for node in cycle_node.children if node.data}
+                seen_tasks = set()
 
                 for task in cycle_info["tasks"]:
                     task_name = task["task"]
                     if filter_text and filter_text not in task_name.lower():
                         continue
 
+                    seen_tasks.add(task_name)
                     state = task["state"]
                     icon = self._get_state_icon(state)
                     state_color = self._get_state_color(state)
 
                     leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
-                    leaf = cycle_node.add_leaf(leaf_label)
-                    leaf.data = task_name
+
+                    task_node = existing_tasks.get(task_name)
+                    if task_node:
+                        if str(task_node.label) != leaf_label:
+                            task_node.set_label(leaf_label)
+                    else:
+                        task_node = cycle_node.add_leaf(leaf_label)
+                        task_node.data = task_name
+
+                # Remove tasks that no longer exist or are filtered out
+                for tname, tnode in existing_tasks.items():
+                    if tname not in seen_tasks:
+                        tnode.remove()
 
             # Refresh selected task status if one is selected
             if self.last_selected_task and self.last_selected_cycle:
@@ -431,45 +446,78 @@ class RocotoApp(App[None]):
 
     def action_boot(self) -> None:
         """
-        Placeholder for rocotoboot.
+        Execute rocotoboot for the selected task.
 
         Returns
         -------
         None
         """
-        if self.last_selected_task:
-            task_name = self.last_selected_task["task"]
-            self.notify(f"Booting task: {task_name} (Mock Action)")
-        else:
-            self.notify("No task selected", severity="warning")
+        self._run_rocoto_command("rocotoboot")
 
     def action_rewind(self) -> None:
         """
-        Placeholder for rocotorewind.
+        Execute rocotorewind for the selected task.
 
         Returns
         -------
         None
         """
-        if self.last_selected_task:
-            task_name = self.last_selected_task["task"]
-            self.notify(f"Rewinding task: {task_name} (Mock Action)")
-        else:
-            self.notify("No task selected", severity="warning")
+        self._run_rocoto_command("rocotorewind")
 
     def action_complete(self) -> None:
         """
-        Placeholder for rocotocomplete.
+        Execute rocotocomplete for the selected task.
 
         Returns
         -------
         None
         """
-        if self.last_selected_task:
-            task_name = self.last_selected_task["task"]
-            self.notify(f"Marking task complete: {task_name} (Mock Action)")
-        else:
-            self.notify("No task selected", severity="warning")
+        self._run_rocoto_command("rocotocomplete")
+
+    @work(thread=True)
+    def _run_rocoto_command(self, command: str) -> None:
+        """
+        Run a Rocoto CLI command for the selected task and cycle.
+
+        Parameters
+        ----------
+        command : str
+            The name of the Rocoto command to run.
+
+        Returns
+        -------
+        None
+        """
+        if not self.last_selected_task or not self.last_selected_cycle:
+            self.call_from_thread(self.notify, "No task selected", severity="warning")
+            return
+
+        task_name = self.last_selected_task["task"]
+        cycle = self.last_selected_cycle
+
+        cmd = [
+            command,
+            "-w",
+            self.parser.workflow_file,
+            "-d",
+            self.parser.database_file,
+            "-c",
+            cycle,
+            "-t",
+            task_name,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                self.call_from_thread(self.notify, f"Successfully executed {command} for {task_name}")
+            else:
+                error_msg = result.stderr.strip() or f"Return code {result.returncode}"
+                self.call_from_thread(self.notify, f"Failed to execute {command}: {error_msg}", severity="error")
+        except FileNotFoundError:
+            self.call_from_thread(self.notify, f"Command not found: {command}. Is Rocoto installed?", severity="error")
+        except Exception as e:
+            self.call_from_thread(self.notify, f"Error executing {command}: {e}", severity="error")
 
     def action_toggle_log(self) -> None:
         """
@@ -542,10 +590,17 @@ class RocotoApp(App[None]):
         """
         log_panel = self.query_one("#log_panel", RichLog)
         try:
+            size = os.path.getsize(log_file)
             with open(log_file, encoding="utf-8", errors="replace") as f:
-                # Read last 100 lines initially?
-                # For now, let's just read from the beginning if it's small or just the end.
-                # Let's read the whole file if it's reasonable.
+                if size > self.MAX_LOG_READ_SIZE:
+                    f.seek(size - self.MAX_LOG_READ_SIZE)
+                    # Skip the first partial line if we seeked
+                    f.readline()
+                    self.call_from_thread(
+                        log_panel.write,
+                        f"--- Log truncated. Showing last {self.MAX_LOG_READ_SIZE // 1024}KB ---",
+                    )
+
                 content = f.read()
                 self.call_from_thread(log_panel.write, content)
 
