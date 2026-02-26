@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 import pytest
@@ -63,3 +64,43 @@ def test_parser_cycle_parsing():
     assert parser._parse_cycle(202301010000) == "202301010000"
     # Test timestamp
     assert parser._parse_cycle(1672531200) == "202301010000"
+
+
+def test_parser_xml_caching(tmp_path):
+    workflow_file = tmp_path / "workflow.xml"
+    workflow_file.write_text("<workflow><task name='t1'></task></workflow>")
+
+    parser = RocotoParser(str(workflow_file), "db")
+    parser.parse_workflow()
+    assert parser._last_parsed_mtime is not None
+    mtime1 = parser._last_parsed_mtime
+
+    # Second call should skip parsing
+    parser.parse_workflow()
+    assert parser._last_parsed_mtime == mtime1
+
+    # Modify file
+    # Ensure mtime changes by setting it explicitly to avoid waiting
+    new_mtime = mtime1 + 100
+    workflow_file.write_text("<workflow><task name='t1'></task><task name='t2'></task></workflow>")
+    os.utime(workflow_file, (new_mtime, new_mtime))
+
+    parser.parse_workflow()
+    assert parser._last_parsed_mtime == new_mtime
+    assert "t2" in parser.tasks_dict
+
+
+def test_get_status_structure(mock_rocoto_files):
+    wf, db = mock_rocoto_files
+    parser = RocotoParser(wf, db)
+    parser.parse_workflow()
+    status = parser.get_status()
+    assert isinstance(status, list)
+    assert len(status) > 0
+    cycle = status[0]
+    assert "cycle" in cycle
+    assert "tasks" in cycle
+    assert len(cycle["tasks"]) > 0
+    task = cycle["tasks"][0]
+    expected_keys = {"task", "state", "exit", "duration", "tries", "jobid", "details"}
+    assert expected_keys.issubset(task.keys())

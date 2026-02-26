@@ -6,9 +6,10 @@ from rocotoviewer.parser import RocotoParser
 def test_parse_workflow_oserror(caplog):
     parser = RocotoParser("wf.xml", "db.db")
     with patch("os.path.exists", return_value=True):
-        with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
-            parser.parse_workflow()
-            assert "Failed to read workflow XML file: Mocked OS Error" in caplog.text
+        with patch("os.path.getmtime", return_value=12345.6):
+            with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
+                parser.parse_workflow()
+                assert "Failed to read workflow XML file: Mocked OS Error" in caplog.text
 
 
 def test_load_workflow_xml_oserror_redundant_check():

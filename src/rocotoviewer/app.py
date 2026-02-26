@@ -1,5 +1,7 @@
+# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+
 """
-.. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+Textual application for viewing Rocoto workflows.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from textual.widgets import (
     Tree,
 )
 
-from rocotoviewer.parser import RocotoParser
+from rocotoviewer.parser import CycleStatus, RocotoParser
 
 
 class RocotoApp(App[None]):
@@ -38,8 +40,37 @@ class RocotoApp(App[None]):
         Path to the Rocoto workflow XML file.
     database_file : str
         Path to the Rocoto SQLite database file.
+    refresh_interval : int, optional
+        Refresh interval in seconds (default: 30).
     **kwargs : Any
         Additional keyword arguments passed to the Textual App constructor.
+
+    Attributes
+    ----------
+    REFRESH_INTERVAL : int
+        Default refresh interval.
+    SIDEBAR_WIDTH : str
+        Width of the sidebar.
+    MAIN_CONTENT_WIDTH : str
+        Width of the main content area.
+    STATUS_TABLE_HEIGHT : str
+        Height of the status table.
+    MAX_LOG_READ_SIZE : int
+        Maximum size of log file to read in bytes.
+    parser : RocotoParser
+        The workflow parser instance.
+    refresh_interval : int
+        The actual refresh interval being used.
+    all_data : list[CycleStatus]
+        The status data for all cycles and tasks.
+    last_selected_task : dict[str, Any] | None
+        Data of the last selected task.
+    last_selected_cycle : str | None
+        Name of the last selected cycle.
+    log_follow : bool
+        Whether to follow the log.
+    current_log_file : str | None
+        Path to the currently viewed log file.
     """
 
     REFRESH_INTERVAL = 30
@@ -110,10 +141,17 @@ class RocotoApp(App[None]):
     }}
     """
 
-    def __init__(self, workflow_file: str, database_file: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        workflow_file: str,
+        database_file: str,
+        refresh_interval: int = 30,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.parser: RocotoParser = RocotoParser(workflow_file, database_file)
-        self.all_data: list[dict[str, Any]] = []
+        self.refresh_interval = refresh_interval
+        self.all_data: list[CycleStatus] = []
         self.last_selected_task: dict[str, Any] | None = None
         self.last_selected_cycle: str | None = None
         self.log_follow: bool = True
@@ -153,7 +191,7 @@ class RocotoApp(App[None]):
         -------
         None
         """
-        self.set_interval(self.REFRESH_INTERVAL, self.action_refresh)  # Auto-refresh
+        self.set_interval(self.refresh_interval, self.action_refresh)  # Auto-refresh
         self.action_refresh()
 
     @work(thread=True)
@@ -618,10 +656,6 @@ class RocotoApp(App[None]):
 
 
 if __name__ == "__main__":
-    import sys
+    from rocotoviewer.cli import main
 
-    if len(sys.argv) < 3:
-        print("Usage: rocotoviewer -w <workflow.xml> -d <database.db>")
-        sys.exit(1)
-    app = RocotoApp(sys.argv[1], sys.argv[2])
-    app.run()
+    main()

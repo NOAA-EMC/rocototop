@@ -1,5 +1,7 @@
+# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+
 """
-.. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+Parser for Rocoto workflow XML files and SQLite databases.
 """
 
 from __future__ import annotations
@@ -12,7 +14,55 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
+
+
+class TaskStatus(TypedDict):
+    """
+    TypedDict representing the status of a single task.
+
+    Attributes
+    ----------
+    task : str
+        The name of the task.
+    state : str
+        The current state of the task (e.g., SUCCEEDED, RUNNING).
+    exit : int | None
+        The exit status of the task.
+    duration : int | None
+        The duration of the task in seconds.
+    tries : int
+        The number of times the task has been tried.
+    jobid : str | None
+        The job ID assigned by the scheduler.
+    details : dict[str, Any]
+        Additional task definitions from the XML.
+    """
+
+    task: str
+    state: str
+    exit: int | None
+    duration: int | None
+    tries: int
+    jobid: str | None
+    details: dict[str, Any]
+
+
+class CycleStatus(TypedDict):
+    """
+    TypedDict representing the status of a cycle and its tasks.
+
+    Attributes
+    ----------
+    cycle : str
+        The formatted cycle string (YYYYMMDDHHMM).
+    tasks : list[TaskStatus]
+        The list of task statuses for this cycle.
+    """
+
+    cycle: str
+    tasks: list[TaskStatus]
+
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -28,6 +78,31 @@ CYCLE_TIMESTAMP_THRESHOLD = 200000000000
 class RocotoTask:
     """
     Represents a task definition from the Rocoto XML.
+
+    Attributes
+    ----------
+    name : str
+        The name of the task.
+    cycledefs : str
+        The cycle definitions associated with the task.
+    command : str
+        The command to execute.
+    account : str
+        The account to use for the job.
+    queue : str
+        The queue to submit the job to.
+    walltime : str
+        The walltime limit for the job.
+    memory : str
+        The memory limit for the job.
+    join : str
+        The path to the joined stdout/stderr log.
+    stdout : str
+        The path to the stdout log.
+    stderr : str
+        The path to the stderr log.
+    dependencies : list[dict[str, Any]]
+        The list of task dependencies.
     """
 
     def __init__(self, name: str, cycledefs: str) -> None:
@@ -80,6 +155,25 @@ class RocotoTask:
 class RocotoParser:
     """
     A parser for Rocoto workflow XML files and associated SQLite databases.
+
+    Attributes
+    ----------
+    workflow_file : str
+        Path to the Rocoto workflow XML file.
+    database_file : str
+        Path to the Rocoto SQLite database file.
+    entity_values : dict[str, str]
+        Dictionary of XML entity values.
+    tasks_dict : dict[str, RocotoTask]
+        Dictionary mapping task names to RocotoTask objects.
+    tasks_ordered : list[str]
+        List of task names in the order they appear in the XML.
+    metatask_list : dict[str, list[str]]
+        Dictionary mapping metatask names to their child task names.
+    cycledef_group_cycles : dict[str, list[str]]
+        Dictionary mapping cycledef groups to their lists of cycles.
+    _last_parsed_mtime : float | None
+        The modification time of the XML file when it was last parsed.
     """
 
     def __init__(self, workflow_file: str, database_file: str) -> None:
@@ -100,6 +194,7 @@ class RocotoParser:
         self.tasks_ordered: list[str] = []
         self.metatask_list: dict[str, list[str]] = defaultdict(list)
         self.cycledef_group_cycles: dict[str, list[str]] = defaultdict(list)
+        self._last_parsed_mtime: float | None = None
 
     def parse_workflow(self) -> None:
         """
@@ -117,8 +212,13 @@ class RocotoParser:
             return
 
         try:
+            mtime = os.path.getmtime(self.workflow_file)
+            if self._last_parsed_mtime is not None and mtime <= self._last_parsed_mtime:
+                return
+
             with open(self.workflow_file, encoding="utf-8") as f:
                 content = f.read()
+            self._last_parsed_mtime = mtime
         except OSError as e:
             logger.error("Failed to read workflow XML file: %s", e)
             return
@@ -481,13 +581,13 @@ class RocotoParser:
             flags=re.DOTALL,
         )
 
-    def get_status(self) -> list[dict[str, Any]]:
+    def get_status(self) -> list[CycleStatus]:
         """
         Query the SQLite database for the status of tasks and cycles.
 
         Returns
         -------
-        list[dict[str, Any]]
+        list[CycleStatus]
             A list of cycle-task status information.
         """
         if not os.path.exists(self.database_file):
@@ -509,7 +609,7 @@ class RocotoParser:
             logger.error("Database error while fetching status: %s", e)
             return []
 
-        result: list[dict[str, Any]] = []
+        result: list[CycleStatus] = []
         for cycle_raw in cycles_raw:
             cycle_str = self._parse_cycle(cycle_raw)
             tasks_status = []

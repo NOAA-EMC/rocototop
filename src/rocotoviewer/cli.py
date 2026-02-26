@@ -1,5 +1,7 @@
+# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+
 """
-.. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+Command-line interface for RocotoViewer.
 """
 
 from __future__ import annotations
@@ -30,6 +32,13 @@ def main() -> None:
         required=True,
         help="Rocoto SQLite database file",
     )
+    parser.add_argument(
+        "-i",
+        "--interval",
+        type=int,
+        default=30,
+        help="Refresh interval in seconds (default: 30)",
+    )
 
     args = parser.parse_args()
 
@@ -40,7 +49,11 @@ def main() -> None:
         print(f"Error: Database file not found: {args.database}")
         sys.exit(1)
 
-    app = RocotoApp(workflow_file=args.workflow, database_file=args.database)
+    app = RocotoApp(
+        workflow_file=args.workflow,
+        database_file=args.database,
+        refresh_interval=args.interval,
+    )
     app.run()
 
 

@@ -64,3 +64,9 @@ async def test_app_ui_loading(mock_rocoto_files):
         # Check if task1 is in the table (it should have an icon now)
         row = [str(cell) for cell in table.get_row_at(0)]
         assert any("task1" in cell for cell in row)
+
+
+def test_app_refresh_interval_assignment(mock_rocoto_files):
+    wf, db = mock_rocoto_files
+    app = RocotoApp(workflow_file=wf, database_file=db, refresh_interval=42)
+    assert app.refresh_interval == 42
