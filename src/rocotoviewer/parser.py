@@ -17,6 +17,49 @@ from datetime import datetime, timedelta
 from typing import Any, TypedDict
 
 
+class TaskDetails(TypedDict):
+    """
+    TypedDict representing the static definition of a task.
+
+    Attributes
+    ----------
+    name : str
+        The name of the task.
+    cycledefs : str
+        The cycle definitions associated with the task.
+    command : str
+        The command to execute.
+    account : str
+        The account to use for the job.
+    queue : str
+        The queue to submit the job to.
+    walltime : str
+        The walltime limit for the job.
+    memory : str
+        The memory limit for the job.
+    join : str
+        The path to the joined stdout/stderr log.
+    stdout : str
+        The path to the stdout log.
+    stderr : str
+        The path to the stderr log.
+    dependencies : list[dict[str, Any]]
+        The list of task dependencies.
+    """
+
+    name: str
+    cycledefs: str
+    command: str
+    account: str
+    queue: str
+    walltime: str
+    memory: str
+    join: str
+    stdout: str
+    stderr: str
+    dependencies: list[dict[str, Any]]
+
+
 class TaskStatus(TypedDict):
     """
     TypedDict representing the status of a single task.
@@ -35,7 +78,7 @@ class TaskStatus(TypedDict):
         The number of times the task has been tried.
     jobid : str | None
         The job ID assigned by the scheduler.
-    details : dict[str, Any]
+    details : TaskDetails | dict[str, Any]
         Additional task definitions from the XML.
     """
 
@@ -45,7 +88,7 @@ class TaskStatus(TypedDict):
     duration: int | None
     tries: int
     jobid: str | None
-    details: dict[str, Any]
+    details: TaskDetails | dict[str, Any]
 
 
 class CycleStatus(TypedDict):
@@ -128,13 +171,13 @@ class RocotoTask:
         self.stderr: str = ""
         self.dependencies: list[dict[str, Any]] = []
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> TaskDetails:
         """
         Convert the RocotoTask to a dictionary.
 
         Returns
         -------
-        dict[str, Any]
+        TaskDetails
             A dictionary representation of the task.
         """
         return {
@@ -580,6 +623,26 @@ class RocotoParser:
             text,
             flags=re.DOTALL,
         )
+
+    def get_summary(self, status_data: list[CycleStatus]) -> dict[str, int]:
+        """
+        Get a summary of task states across all cycles.
+
+        Parameters
+        ----------
+        status_data : list[CycleStatus]
+            The list of cycle status information.
+
+        Returns
+        -------
+        dict[str, int]
+            A dictionary mapping task states to their counts.
+        """
+        summary: dict[str, int] = defaultdict(int)
+        for cycle in status_data:
+            for task in cycle["tasks"]:
+                summary[task["state"]] += 1
+        return dict(summary)
 
     def get_status(self) -> list[CycleStatus]:
         """

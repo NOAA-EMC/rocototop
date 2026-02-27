@@ -72,4 +72,6 @@ async def test_app_filtering(mock_advanced_files):
         for _ in range(11):
             await pilot.press("backspace")
         await pilot.pause(0.1)
+        # Re-fetch cycle node as it might have been removed and re-added
+        cycle_node = tree.root.children[0]
         assert len(cycle_node.children) == 1

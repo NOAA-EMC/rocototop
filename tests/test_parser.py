@@ -104,3 +104,33 @@ def test_get_status_structure(mock_rocoto_files):
     task = cycle["tasks"][0]
     expected_keys = {"task", "state", "exit", "duration", "tries", "jobid", "details"}
     assert expected_keys.issubset(task.keys())
+
+
+def test_parser_get_summary(mock_rocoto_files):
+    wf, db = mock_rocoto_files
+    parser = RocotoParser(wf, db)
+    parser.parse_workflow()
+    status = parser.get_status()
+
+    summary = parser.get_summary(status)
+    assert summary == {"SUCCEEDED": 1}
+
+    # Add a dummy task with a different state
+    status.append(
+        {
+            "cycle": "202301010600",
+            "tasks": [
+                {
+                    "task": "task2",
+                    "state": "RUNNING",
+                    "exit": None,
+                    "duration": None,
+                    "tries": 1,
+                    "jobid": "123",
+                    "details": {},
+                }
+            ],
+        }
+    )
+    summary = parser.get_summary(status)
+    assert summary == {"SUCCEEDED": 1, "RUNNING": 1}

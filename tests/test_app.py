@@ -70,3 +70,48 @@ def test_app_refresh_interval_assignment(mock_rocoto_files):
     wf, db = mock_rocoto_files
     app = RocotoApp(workflow_file=wf, database_file=db, refresh_interval=42)
     assert app.refresh_interval == 42
+
+
+@pytest.mark.asyncio
+async def test_app_status_bar_and_filtering(mock_rocoto_files):
+    wf, db = mock_rocoto_files
+    app = RocotoApp(workflow_file=wf, database_file=db)
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+
+        status_bar = app.query_one("#status_bar")
+        # Check summary in status bar
+        assert "S:1" in str(status_bar.render())
+
+        # Test filtering
+        tree = app.query_one("#cycle_tree", Tree)
+
+        # Initially 1 cycle
+        assert len(tree.root.children) == 1
+
+        # Filter for something that doesn't exist
+        await pilot.click("#filter_input")
+        for char in "nonexistent":
+            await pilot.press(char)
+        await pilot.pause(0.1)
+
+        # Cycle should be hidden
+        assert len(tree.root.children) == 0
+
+        # Clear filter
+        for _ in range(11):
+            await pilot.press("backspace")
+        await pilot.pause(0.1)
+
+        # Cycle should be back
+        assert len(tree.root.children) == 1
+
+        # Select task and check status bar path
+        cycle_node = tree.root.children[0]
+        cycle_node.expand()
+        await pilot.pause(0.1)
+        task_node = cycle_node.children[0]
+        tree.select_node(task_node)
+        await pilot.pause(0.1)
+
+        assert "Path: Workflow > 202301010000 > task1" in str(status_bar.render())
