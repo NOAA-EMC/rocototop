@@ -6,6 +6,7 @@ Textual application for viewing Rocoto workflows.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import time
@@ -28,6 +29,8 @@ from textual.widgets import (
 )
 
 from rocotoviewer.parser import CycleStatus, RocotoParser
+
+logger = logging.getLogger(__name__)
 
 
 class RocotoApp(App[None]):
@@ -81,7 +84,8 @@ class RocotoApp(App[None]):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("r", "refresh", "Refresh"),
+        Binding("r", "refresh", "Refresh (Pulse)"),
+        Binding("p", "pulse", "Pulse (rocotorun)", show=True),
         Binding("b", "boot", "Boot Task", show=True),
         Binding("w", "rewind", "Rewind Task", show=True),
         Binding("c", "complete", "Mark Complete", show=True),
@@ -191,29 +195,83 @@ class RocotoApp(App[None]):
         -------
         None
         """
-        self.set_interval(self.refresh_interval, self.action_refresh)  # Auto-refresh
+        self.set_interval(self.refresh_interval, self._auto_refresh)  # Auto-refresh
         self.action_refresh()
 
-    @work(thread=True)
+    def _auto_refresh(self) -> None:
+        """
+        Perform a lightweight background refresh.
+
+        This is used for periodic background updates.
+        """
+        self._background_refresh(run_pulse=False)
+
     def action_refresh(self) -> None:
+        """
+        Perform a full background refresh including a pulse.
+
+        Triggered by the 'r' key.
+        """
+        self._background_refresh(run_pulse=True)
+
+    def action_pulse(self) -> None:
+        """
+        Perform a pulse (rocotorun) and refresh data.
+
+        Triggered by the 'p' key.
+        """
+        self._background_refresh(run_pulse=True)
+
+    @work(thread=True, exclusive=True)
+    def _background_refresh(self, run_pulse: bool = False) -> None:
         """
         Perform background refresh of data.
 
         This worker parses the workflow XML and queries the database
         in a separate thread to avoid blocking the UI.
 
+        Parameters
+        ----------
+        run_pulse : bool, optional
+            Whether to run rocotorun before refreshing data (default: False).
+
         Returns
         -------
         None
         """
         try:
-            # We don't notify on auto-refresh to avoid being annoying
-            # self.call_from_thread(self.notify, "Refreshing data...")
+            if run_pulse:
+                self._run_pulse_sync()
+
             self.parser.parse_workflow()
             self.all_data = self.parser.get_status()
             self.call_from_thread(self._update_ui)
         except Exception as e:
             self.call_from_thread(self.notify, f"Error refreshing data: {e}", severity="error")
+
+    def _run_pulse_sync(self) -> None:
+        """
+        Run rocotorun synchronously.
+
+        Should be called from a background worker.
+        """
+        cmd = [
+            "rocotorun",
+            "-w",
+            self.parser.workflow_file,
+            "-d",
+            self.parser.database_file,
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            self.call_from_thread(
+                self.notify,
+                "rocotorun not found. Is Rocoto installed?",
+                severity="warning",
+            )
+        except Exception as e:
+            logger.error("Error running rocotorun: %s", e)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """

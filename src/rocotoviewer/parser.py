@@ -289,11 +289,26 @@ class RocotoParser:
         if dtd_match:
             dtd_content = dtd_match.group(1)
             entity_matches = re.finditer(
-                r'<!ENTITY\s+(\w+)\s+(?:SYSTEM\s+)?["\']([^"\']*)["\']\s*>',
+                r'<!ENTITY\s+(\w+)\s+(SYSTEM\s+)?["\']([^"\']*)["\']\s*>',
                 dtd_content,
             )
             for match in entity_matches:
-                name, value = match.groups()
+                name, system, value = match.groups()
+                if system:
+                    # Resolve path relative to workflow file
+                    base_dir = os.path.dirname(os.path.abspath(self.workflow_file))
+                    abs_path = os.path.join(base_dir, value)
+                    if os.path.exists(abs_path):
+                        try:
+                            with open(abs_path, encoding="utf-8") as f:
+                                value = f.read()
+                        except OSError as e:
+                            logger.error("Failed to read SYSTEM entity file %s: %s", abs_path, e)
+                            value = ""
+                    else:
+                        logger.warning("SYSTEM entity file not found: %s", abs_path)
+                        value = ""
+
                 for k, v in entity_values.items():
                     value = value.replace(f"&{k};", v)
                 entity_values[name] = value
@@ -344,6 +359,8 @@ class RocotoParser:
                 self._add_task(child, {}, [])
             elif child.tag == "metatask":
                 self._expand_metatask(child, {}, [])
+            elif child.tag == "tasks":
+                self._process_tasks_tag(child, {}, [])
 
     def _parse_cycledef(self, element: ET.Element) -> None:
         """
@@ -379,6 +396,36 @@ class RocotoParser:
                         curr += inc
             except ValueError as e:
                 logger.warning("Failed to parse cycledef text '%s': %s", text, e)
+
+    def _process_tasks_tag(
+        self,
+        element: ET.Element,
+        current_vars: dict[str, str],
+        parent_metatasks: list[str],
+    ) -> None:
+        """
+        Process a <tasks> grouping element.
+
+        Parameters
+        ----------
+        element : ET.Element
+            The tasks XML element.
+        current_vars : dict[str, str]
+            Current variable substitutions.
+        parent_metatasks : list[str]
+            List of parent metatask names.
+
+        Returns
+        -------
+        None
+        """
+        for child in element:
+            if child.tag == "task":
+                self._add_task(child, current_vars, parent_metatasks)
+            elif child.tag == "metatask":
+                self._expand_metatask(child, current_vars, parent_metatasks)
+            elif child.tag == "tasks":
+                self._process_tasks_tag(child, current_vars, parent_metatasks)
 
     def _expand_metatask(
         self,
@@ -417,6 +464,8 @@ class RocotoParser:
                     self._add_task(child, current_vars, new_parents)
                 elif child.tag == "metatask":
                     self._expand_metatask(child, current_vars, new_parents)
+                elif child.tag == "tasks":
+                    self._process_tasks_tag(child, current_vars, new_parents)
             return
 
         num_values = len(next(iter(vars_dict.values())))
@@ -436,6 +485,8 @@ class RocotoParser:
                     self._add_task(child, new_vars, new_parents)
                 elif child.tag == "metatask":
                     self._expand_metatask(child, new_vars, new_parents)
+                elif child.tag == "tasks":
+                    self._process_tasks_tag(child, new_vars, new_parents)
 
     def _add_task(
         self,

@@ -39,6 +39,8 @@ def test_parser_parse_cycle_edge_cases():
 
 def test_entity_parsing(tmp_path):
     wf = tmp_path / "entities.xml"
+    # Create the some_file so SYSTEM entity doesn't return empty string
+    (tmp_path / "some_file").write_text("some_file_content")
     wf.write_text("""<?xml version="1.0"?>
 <!DOCTYPE workflow [
   <!ENTITY TEST "value">
@@ -49,7 +51,7 @@ def test_entity_parsing(tmp_path):
     parser = RocotoParser(str(wf), "db")
     entities = parser._get_entity_values(wf.read_text())
     assert entities["TEST"] == "value"
-    assert entities["SYSTEM_TEST"] == "some_file"
+    assert entities["SYSTEM_TEST"] == "some_file_content"
 
 
 def test_parser_sqlite_error(caplog):
