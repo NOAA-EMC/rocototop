@@ -230,6 +230,43 @@ class RocotoApp(App[None]):
         """
         self._update_ui()
 
+    def _update_status_bar(self) -> None:
+        """
+        Update the status bar with current summary and path.
+
+        Returns
+        -------
+        None
+        """
+        summary = self.parser.get_summary(self.all_data)
+        parts = []
+
+        # Define priority states and their short names/colors
+        states = [
+            ("SUCCEEDED", "S", "green"),
+            ("RUNNING", "R", "yellow"),
+            ("FAILED", "F", "red"),
+            ("DEAD", "D", "red"),
+            ("QUEUED", "Q", "blue"),
+            ("WAITING", "W", "white"),
+        ]
+
+        for state, short, color in states:
+            count = summary.get(state, 0)
+            if count > 0:
+                parts.append(f"[{color}]{short}:{count}[/{color}]")
+
+        summary_str = " | ".join(parts) if parts else "No tasks"
+
+        # Update path
+        path = "Path: Workflow"
+        if self.last_selected_cycle:
+            path += f" > {self.last_selected_cycle}"
+            if self.last_selected_task:
+                path += f" > {self.last_selected_task['task']}"
+
+        self.query_one("#status_bar", Static).update(f"{path} | {summary_str}")
+
     def _update_ui(self) -> None:
         """
         Update UI widgets with new data.
@@ -246,9 +283,23 @@ class RocotoApp(App[None]):
             tree = self.query_one("#cycle_tree", Tree)
             # To preserve expansion state, we'll track existing nodes
             existing_cycles = {str(node.label): node for node in tree.root.children}
+            seen_cycles = set()
 
             for cycle_info in self.all_data:
                 cycle_str = cycle_info["cycle"]
+
+                # Pre-filter tasks to see if cycle should be shown
+                visible_tasks = []
+                for task in cycle_info["tasks"]:
+                    if not filter_text or filter_text in task["task"].lower():
+                        visible_tasks.append(task)
+
+                if not visible_tasks and filter_text:
+                    # Cycle should be hidden. If it exists, we skip it
+                    # so that it gets removed in the cleanup loop.
+                    continue
+
+                seen_cycles.add(cycle_str)
                 cycle_node = existing_cycles.get(cycle_str)
 
                 # If cycle node doesn't exist, create it.
@@ -259,11 +310,8 @@ class RocotoApp(App[None]):
                 existing_tasks = {node.data: node for node in cycle_node.children if node.data}
                 seen_tasks = set()
 
-                for task in cycle_info["tasks"]:
+                for task in visible_tasks:
                     task_name = task["task"]
-                    if filter_text and filter_text not in task_name.lower():
-                        continue
-
                     seen_tasks.add(task_name)
                     state = task["state"]
                     icon = self._get_state_icon(state)
@@ -279,10 +327,18 @@ class RocotoApp(App[None]):
                         task_node = cycle_node.add_leaf(leaf_label)
                         task_node.data = task_name
 
-                # Remove tasks that no longer exist or are filtered out
+                # Remove tasks that no longer exist
                 for tname, tnode in existing_tasks.items():
                     if tname not in seen_tasks:
                         tnode.remove()
+
+            # Remove cycles that no longer exist
+            for cstr, cnode in existing_cycles.items():
+                if cstr not in seen_cycles:
+                    cnode.remove()
+
+            # Update status bar summary
+            self._update_status_bar()
 
             # Refresh selected task status if one is selected
             if self.last_selected_task and self.last_selected_cycle:
@@ -371,7 +427,9 @@ class RocotoApp(App[None]):
 
         if node.allow_expand:
             node.expand()
-            self.query_one("#status_bar", Static).update(f"Path: Workflow > {node.label}")
+            self.last_selected_cycle = str(node.label)
+            self.last_selected_task = None
+            self._update_status_bar()
         else:
             # Task leaf node
             task_name = node.data
@@ -384,7 +442,7 @@ class RocotoApp(App[None]):
                         if task["task"] == task_name:
                             self.last_selected_task = task
                             self.last_selected_cycle = cycle_str
-                            self.query_one("#status_bar", Static).update(f"Path: Workflow > {cycle_str} > {task_name}")
+                            self._update_status_bar()
                             self._display_details(task, cycle_str)
                             self._update_log()
                             break
