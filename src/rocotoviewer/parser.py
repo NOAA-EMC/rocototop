@@ -57,6 +57,7 @@ class TaskDetails(TypedDict):
     join: str
     stdout: str
     stderr: str
+    envars: dict[str, str]
     dependencies: list[dict[str, Any]]
 
 
@@ -169,6 +170,7 @@ class RocotoTask:
         self.join: str = ""
         self.stdout: str = ""
         self.stderr: str = ""
+        self.envars: dict[str, str] = {}
         self.dependencies: list[dict[str, Any]] = []
 
     def to_dict(self) -> TaskDetails:
@@ -191,6 +193,7 @@ class RocotoTask:
             "join": self.join,
             "stdout": self.stdout,
             "stderr": self.stderr,
+            "envars": self.envars,
             "dependencies": self.dependencies,
         }
 
@@ -549,6 +552,14 @@ class RocotoParser:
                 task.stdout = resolve_vars(get_content(sub))
             elif sub.tag == "stderr":
                 task.stderr = resolve_vars(get_content(sub))
+            elif sub.tag == "envar":
+                name_elem = sub.find("name")
+                val_elem = sub.find("value")
+                if name_elem is not None and val_elem is not None:
+                    # Envars can also contain <cyclestr> tags, but get_content handles them
+                    v_name = resolve_vars(get_content(name_elem))
+                    v_val = resolve_vars(get_content(val_elem))
+                    task.envars[v_name] = v_val
             elif sub.tag == "dependency":
                 task.dependencies = self._parse_deps_with_vars(sub, resolve_vars)
 
@@ -744,8 +755,15 @@ class RocotoParser:
             else:
                 for tname in self.tasks_ordered:
                     task_def = self.tasks_dict[tname]
+                    # Check each cycledef group for this task
                     if task_def.cycledefs != DEFAULT_CYCLE:
-                        if cycle_str not in self.cycledef_group_cycles.get(task_def.cycledefs, []):
+                        groups = [g.strip() for g in task_def.cycledefs.split(",")]
+                        in_cycle = False
+                        for group in groups:
+                            if cycle_str in self.cycledef_group_cycles.get(group, []):
+                                in_cycle = True
+                                break
+                        if not in_cycle:
                             continue
 
                     job = jobs_data.get(cycle_raw, {}).get(tname)

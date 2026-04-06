@@ -583,6 +583,10 @@ class RocotoApp(App[None]):
         if memory := details.get("memory"):
             content += f"[bold]Memory:[/bold] {memory}\n"
 
+        if datatroot := details.get("envars", {}).get("DATAROOT"):
+            res_dr = self.parser.resolve_cyclestr(datatroot, cycle)
+            content += f"[bold]DATAROOT:[/bold] {res_dr}\n"
+
         if join:
             content += f"[bold]Log (Joined):[/bold] {join}\n"
         else:
@@ -590,6 +594,12 @@ class RocotoApp(App[None]):
                 content += f"[bold]Stdout:[/bold] {stdout}\n"
             if stderr:
                 content += f"[bold]Stderr:[/bold] {stderr}\n"
+
+        if envars := details.get("envars"):
+            content += "[bold]Environment Variables:[/bold]\n"
+            for k, v in envars.items():
+                res_v = self.parser.resolve_cyclestr(v, cycle)
+                content += f"  - {k}={res_v}\n"
 
         if deps := details.get("dependencies"):
             content += "[bold]Dependencies:[/bold]\n"
