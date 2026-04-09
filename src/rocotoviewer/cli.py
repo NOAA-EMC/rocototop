@@ -10,6 +10,7 @@ import argparse
 import os
 import sys
 
+from rocotoviewer import __version__
 from rocotoviewer.app import RocotoApp
 
 
@@ -20,6 +21,12 @@ def main() -> None:
     This function parses command-line arguments and launches the Textual application.
     """
     parser = argparse.ArgumentParser(description="RocotoViewer — Textual interface to Rocoto")
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     parser.add_argument(
         "-w",
         "--workflow",

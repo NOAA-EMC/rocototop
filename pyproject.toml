@@ -1,12 +1,12 @@
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "rocotoviewer"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A Textual interface to Rocoto workflows"
 authors = [
     { name = "Barry Baker" }
@@ -26,6 +26,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pip-tools",
+    "setuptools-scm",
 ]
 docs = [
     "mkdocs",
@@ -35,6 +36,9 @@ docs = [
 
 [project.scripts]
 rocotoviewer = "rocotoviewer.cli:main"
+
+[tool.setuptools_scm]
+write_to = "src/rocotoviewer/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]
