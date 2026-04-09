@@ -241,10 +241,14 @@ class RocotoApp(App[None]):
         """
         try:
             if run_pulse:
+                self.call_from_thread(self.notify, "Starting pulse (rocotorun)...")
                 self._run_pulse_sync()
+                self.call_from_thread(self.notify, "Pulse (rocotorun) completed")
 
             self.parser.parse_workflow()
             self.all_data = self.parser.get_status()
+            if not run_pulse:
+                self.call_from_thread(self.notify, "Data refresh completed")
             self.call_from_thread(self._update_ui)
         except Exception as e:
             self.call_from_thread(self.notify, f"Error refreshing data: {e}", severity="error")
