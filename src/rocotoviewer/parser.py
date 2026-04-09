@@ -764,7 +764,7 @@ class RocotoParser:
                 # Fallback if XML hasn't been parsed: just show what's in the DB
                 ordered_names = sorted(list(db_tasks_for_cycle))
             else:
-                # Preserve XML order for tasks that exist in XML, 
+                # Preserve XML order for tasks that exist in XML,
                 # then append any DB-only tasks at the end.
                 ordered_names = [t for t in self.tasks_ordered if t in all_task_names]
                 db_only = sorted(list(db_tasks_for_cycle - set(self.tasks_ordered)))
@@ -773,7 +773,7 @@ class RocotoParser:
             for tname in ordered_names:
                 task_def = self.tasks_dict.get(tname)
                 job = jobs_data.get(cycle_raw, {}).get(tname)
-                
+
                 task_info = {
                     "task": tname,
                     "state": job["state"] if job else "WAITING",

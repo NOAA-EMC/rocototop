@@ -1,7 +1,7 @@
-import os
 import sqlite3
-import pytest
+
 from rocotoviewer.parser import RocotoParser
+
 
 def test_filtering_logic_preserved_except_first_cycle(tmp_path):
     workflow_file = tmp_path / "workflow_filt.xml"
@@ -19,9 +19,9 @@ def test_filtering_logic_preserved_except_first_cycle(tmp_path):
     conn = sqlite3.connect(db_file)
     c = conn.cursor()
     c.execute("CREATE TABLE cycles (cycle INTEGER)")
-    c.execute("INSERT INTO cycles VALUES (1680372000)") # 202304011800 (First)
-    c.execute("INSERT INTO cycles VALUES (1680393600)") # 202304020000 (Second)
-    
+    c.execute("INSERT INTO cycles VALUES (1680372000)")  # 202304011800 (First)
+    c.execute("INSERT INTO cycles VALUES (1680393600)")  # 202304020000 (Second)
+
     c.execute("""
         CREATE TABLE jobs (
             taskname TEXT, cycle INTEGER, state TEXT,

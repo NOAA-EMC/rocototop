@@ -1,7 +1,7 @@
-import os
 import sqlite3
-import pytest
+
 from rocotoviewer.parser import RocotoParser
+
 
 def test_all_cycles_show_all_tasks(tmp_path):
     workflow_file = tmp_path / "workflow_all.xml"
@@ -21,9 +21,9 @@ def test_all_cycles_show_all_tasks(tmp_path):
     conn = sqlite3.connect(db_file)
     c = conn.cursor()
     c.execute("CREATE TABLE cycles (cycle INTEGER)")
-    c.execute("INSERT INTO cycles VALUES (1672531200)") # 00:00
-    c.execute("INSERT INTO cycles VALUES (1672534800)") # 01:00
-    
+    c.execute("INSERT INTO cycles VALUES (1672531200)")  # 00:00
+    c.execute("INSERT INTO cycles VALUES (1672534800)")  # 01:00
+
     c.execute("""
         CREATE TABLE jobs (
             taskname TEXT, cycle INTEGER, state TEXT,
