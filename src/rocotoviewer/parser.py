@@ -739,44 +739,52 @@ class RocotoParser:
             cycle_str = self._parse_cycle(cycle_raw)
             tasks_status = []
 
-            if not self.tasks_ordered:
-                for tname, job in jobs_data.get(cycle_raw, {}).items():
-                    tasks_status.append(
-                        {
-                            "task": tname,
-                            "state": job["state"],
-                            "exit": job["exit_status"],
-                            "duration": job["duration"],
-                            "tries": job["tries"],
-                            "jobid": job["jobid"],
-                            "details": {},
-                        }
-                    )
-            else:
+            # Determine tasks defined for this cycle in the XML
+            xml_tasks_for_cycle = set()
+            if self.tasks_ordered:
                 for tname in self.tasks_ordered:
                     task_def = self.tasks_dict[tname]
-                    # Check each cycledef group for this task
-                    if task_def.cycledefs != DEFAULT_CYCLE:
+                    if task_def.cycledefs == DEFAULT_CYCLE:
+                        xml_tasks_for_cycle.add(tname)
+                    else:
                         groups = [g.strip() for g in task_def.cycledefs.split(",")]
-                        in_cycle = False
                         for group in groups:
                             if cycle_str in self.cycledef_group_cycles.get(group, []):
-                                in_cycle = True
+                                xml_tasks_for_cycle.add(tname)
                                 break
-                        if not in_cycle:
-                            continue
 
-                    job = jobs_data.get(cycle_raw, {}).get(tname)
-                    task_info = {
-                        "task": tname,
-                        "state": job["state"] if job else "PENDING",
-                        "exit": job["exit_status"] if job else None,
-                        "duration": job["duration"] if job else None,
-                        "tries": job["tries"] if job else 0,
-                        "jobid": job["jobid"] if job else None,
-                        "details": task_def.to_dict(),
-                    }
-                    tasks_status.append(task_info)
+            # Get names of all tasks that have job records in the DB for this cycle
+            db_tasks_for_cycle = set(jobs_data.get(cycle_raw, {}).keys())
+
+            # The set of tasks to show is the union of what's in the XML for this cycle
+            # AND anything that actually has a record in the database for this cycle.
+            all_task_names = xml_tasks_for_cycle | db_tasks_for_cycle
+
+            if not self.tasks_ordered:
+                # Fallback if XML hasn't been parsed: just show what's in the DB
+                ordered_names = sorted(list(db_tasks_for_cycle))
+            else:
+                # Preserve XML order for tasks that exist in XML, 
+                # then append any DB-only tasks at the end.
+                ordered_names = [t for t in self.tasks_ordered if t in all_task_names]
+                db_only = sorted(list(db_tasks_for_cycle - set(self.tasks_ordered)))
+                ordered_names.extend(db_only)
+
+            for tname in ordered_names:
+                task_def = self.tasks_dict.get(tname)
+                job = jobs_data.get(cycle_raw, {}).get(tname)
+                
+                task_info = {
+                    "task": tname,
+                    "state": job["state"] if job else "WAITING",
+                    "exit": job["exit_status"] if job else None,
+                    "duration": job["duration"] if job else None,
+                    "tries": job["tries"] if job else 0,
+                    "jobid": job["jobid"] if job else None,
+                    "details": task_def.to_dict() if task_def else {},
+                }
+                tasks_status.append(task_info)
+
             result.append({"cycle": cycle_str, "tasks": tasks_status})
         return result
 
