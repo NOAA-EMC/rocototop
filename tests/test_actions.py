@@ -48,7 +48,9 @@ async def test_action_rewind_calls_subprocess(mock_app):
             await pilot.pause(0.1)
 
             assert mock_run.call_count >= 1
-            assert mock_run.call_args[0][0][0] == "rocotorewind"
+            # The pulse triggers 'rocotorun', the action triggers 'rocotorewind'
+            # Check if ANY of the calls were 'rocotorewind'
+            assert any(call[0][0][0] == "rocotorewind" for call in mock_run.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -60,7 +62,8 @@ async def test_action_complete_calls_subprocess(mock_app):
             await pilot.pause(0.1)
 
             assert mock_run.call_count >= 1
-            assert mock_run.call_args[0][0][0] == "rocotocomplete"
+            # Check if ANY of the calls were 'rocotocomplete'
+            assert any(call[0][0][0] == "rocotocomplete" for call in mock_run.call_args_list)
 
 
 @pytest.mark.asyncio
