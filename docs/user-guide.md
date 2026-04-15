@@ -22,7 +22,8 @@ RocotoTop's interface is divided into three main sections:
 | `q` | Quit | Exit the application. |
 | `r` | Refresh | Manually trigger a data refresh from the XML and database. |
 | `b` | Boot | Execute `rocotoboot` for the selected task (Placeholder). |
-| `w` | Rewind | Execute `rocotorewind` for the selected task (Placeholder). |
+| `w` | Rewind | Execute `rocotorewind` for the selected task. |
+| `W` | Rewind Cycle | Execute `rocotorewind` for every task in the selected cycle. |
 | `c` | Complete | Mark the selected task as complete (Placeholder). |
 | `l` | Toggle Log | Toggle between the Details and Log tabs. |
 | `f` | Follow Log | Toggle automatic scrolling to the bottom of the log (Follow mode). |

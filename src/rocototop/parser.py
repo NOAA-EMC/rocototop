@@ -587,11 +587,15 @@ class RocotoParser:
         deps = []
         for child in element:
             attrib = {k: resolve_vars(v) for k, v in child.attrib.items()}
-            dep = {"type": child.tag, "attrib": attrib}
+            dep: dict[str, Any] = {"type": child.tag, "attrib": attrib}
             if child.tag in ["and", "or", "not", "nand", "nor", "xor", "some"]:
                 dep["children"] = self._parse_deps_with_vars(child, resolve_vars)
             else:
-                dep["text"] = resolve_vars((child.text or "").strip())
+                # Capture full inner content including child tags like <cyclestr>
+                inner = child.text or ""
+                for sub in child:
+                    inner += ET.tostring(sub, encoding="unicode")
+                dep["text"] = resolve_vars(inner.strip())
             deps.append(dep)
         return deps
 

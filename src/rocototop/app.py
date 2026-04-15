@@ -89,6 +89,7 @@ class RocotoApp(App[None]):
         Binding("p", "pulse", "Pulse (rocotorun)", show=True),
         Binding("b", "boot", "Boot Task", show=True),
         Binding("w", "rewind", "Rewind Task", show=True),
+        Binding("W", "rewind_cycle", "Rewind Cycle", show=True),
         Binding("c", "complete", "Mark Complete", show=True),
         Binding("l", "toggle_log", "Toggle Log", show=True),
         Binding("f", "toggle_follow", "Follow Log", show=True),
@@ -643,10 +644,48 @@ class RocotoApp(App[None]):
 
         if deps := details.get("dependencies"):
             content += "[bold]Dependencies:[/bold]\n"
-            for dep in deps:
-                content += f"  - {dep['type']}: {dep.get('attrib', {})} {dep.get('text', '')}\n"
+            content += self._format_deps(deps, indent=2)
 
         panel.update(content)
+
+    def _format_deps(self, deps: list[dict[str, Any]], indent: int = 0) -> str:
+        """
+        Format dependency list into readable indented text.
+
+        Parameters
+        ----------
+        deps : list[dict[str, Any]]
+            The dependency list from the parser.
+        indent : int
+            Current indentation level in spaces.
+
+        Returns
+        -------
+        str
+            Formatted dependency string.
+        """
+        prefix = " " * indent
+        lines = ""
+        for dep in deps:
+            dep_type = dep["type"]
+            attrib = dep.get("attrib", {})
+            text = dep.get("text", "")
+
+            if dep_type in ["and", "or", "not", "nand", "nor", "xor", "some"]:
+                lines += f"{prefix}- [{dep_type.upper()}]\n"
+                children = dep.get("children", [])
+                lines += self._format_deps(children, indent + 4)
+            else:
+                # Format attributes as key=value pairs
+                attr_parts = [f"{k}={v}" for k, v in attrib.items()]
+                attr_str = ", ".join(attr_parts) if attr_parts else ""
+                parts = [dep_type]
+                if attr_str:
+                    parts.append(attr_str)
+                if text:
+                    parts.append(text)
+                lines += f"{prefix}- {' '.join(parts)}\n"
+        return lines
 
     def action_boot(self) -> None:
         """
@@ -677,6 +716,82 @@ class RocotoApp(App[None]):
         None
         """
         self._run_rocoto_command("rocotocomplete")
+
+    def action_rewind_cycle(self) -> None:
+        """
+        Execute rocotorewind for every task in the selected cycle.
+
+        Triggered by the 'W' key. Requires a cycle to be selected.
+        """
+        if not self.last_selected_cycle:
+            self.notify("No cycle selected", severity="warning")
+            return
+
+        # Find all tasks for the selected cycle
+        tasks: list[str] = []
+        for cycle_info in self.all_data:
+            if cycle_info["cycle"] == self.last_selected_cycle:
+                tasks = [t["task"] for t in cycle_info["tasks"]]
+                break
+
+        if not tasks:
+            self.notify("No tasks found in selected cycle", severity="warning")
+            return
+
+        self._rewind_cycle_tasks(self.last_selected_cycle, tasks)
+
+    @work(thread=True)
+    def _rewind_cycle_tasks(self, cycle: str, tasks: list[str]) -> None:
+        """
+        Run rocotorewind for each task in a cycle in a background thread.
+
+        Parameters
+        ----------
+        cycle : str
+            The cycle string.
+        tasks : list[str]
+            List of task names to rewind.
+        """
+        self.call_from_thread(self.notify, f"Rewinding {len(tasks)} tasks in cycle {cycle}...")
+        succeeded = 0
+        failed = 0
+
+        for task_name in tasks:
+            cmd = [
+                "rocotorewind",
+                "-w",
+                self.parser.workflow_file,
+                "-d",
+                self.parser.database_file,
+                "-c",
+                cycle,
+                "-t",
+                task_name,
+            ]
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    succeeded += 1
+                else:
+                    failed += 1
+                    logger.warning("Failed to rewind %s: %s", task_name, result.stderr.strip())
+            except FileNotFoundError:
+                self.call_from_thread(
+                    self.notify,
+                    "rocotorewind not found. Is Rocoto installed?",
+                    severity="error",
+                )
+                return
+            except Exception as e:
+                failed += 1
+                logger.error("Error rewinding %s: %s", task_name, e)
+
+        msg = f"Cycle rewind complete: {succeeded} succeeded"
+        if failed:
+            msg += f", {failed} failed"
+            self.call_from_thread(self.notify, msg, severity="warning")
+        else:
+            self.call_from_thread(self.notify, msg)
 
     @work(thread=True)
     def _run_rocoto_command(self, command: str) -> None:

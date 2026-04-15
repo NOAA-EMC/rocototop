@@ -109,4 +109,6 @@ After fixing the underlying issue (e.g., fixing a data issue that caused the Seg
 
 With `run_model_A` selected, press `w` to "Rewind" the task. RocotoTop will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `r` to see the state change to `QUEUED` or `RUNNING`.
 
+To rewind an entire cycle at once, select the cycle node in the tree and press `W` (uppercase). RocotoTop will run `rocotorewind` for every task in that cycle and report the results.
+
 *(Note: In this demo version, actions show a notification in the UI).*
