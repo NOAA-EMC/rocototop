@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 from textual.widgets import DataTable, Input, Static
 
-from rocotoviewer.app import RocotoApp
+from rocototop.app import RocotoApp
 
 
 @pytest.fixture

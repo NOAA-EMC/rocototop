@@ -1,10 +1,10 @@
 # Getting Started
 
-This guide will help you get RocotoViewer up and running on your system.
+This guide will help you get RocotoTop up and running on your system.
 
 ## Prerequisites
 
-Before installing RocotoViewer, ensure you have the following:
+Before installing RocotoTop, ensure you have the following:
 
 - **Python**: Version 3.9 or higher.
 - **Rocoto**: You should have a Rocoto workflow XML file and its corresponding SQLite database.
@@ -15,8 +15,8 @@ Before installing RocotoViewer, ensure you have the following:
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/rocotoviewer/rocotoviewer.git
-    cd rocotoviewer
+    git clone https://github.com/rocototop/rocototop.git
+    cd rocototop
     ```
 
 2.  **Install the package**:
@@ -25,12 +25,12 @@ Before installing RocotoViewer, ensure you have the following:
     pip install .
     ```
 
-## Running RocotoViewer
+## Running RocotoTop
 
-To start RocotoViewer, you need to provide the path to your workflow XML file and the SQLite database file:
+To start RocotoTop, you need to provide the path to your workflow XML file and the SQLite database file:
 
 ```bash
-rocotoviewer -w my_workflow.xml -d my_database.db
+rocototop -w my_workflow.xml -d my_database.db
 ```
 
 ### Command Line Arguments

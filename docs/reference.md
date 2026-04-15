@@ -2,7 +2,7 @@
 
 ## Command Line Interface
 
-### `rocotoviewer`
+### `rocototop`
 
 The primary command to launch the TUI.
 
@@ -14,7 +14,7 @@ The primary command to launch the TUI.
 
 ## Architecture Overview
 
-RocotoViewer is built with a separation of concerns:
+RocotoTop is built with a separation of concerns:
 
 - **`cli.py`**: Handles argument parsing and application entry.
 - **`app.py`**: Contains the Textual application logic, widget definitions, and event handling.
@@ -24,5 +24,5 @@ RocotoViewer is built with a separation of concerns:
 
 Below is the automatically generated documentation for the core classes.
 
-::: rocotoviewer.app.RocotoApp
-::: rocotoviewer.parser.RocotoParser
+::: rocototop.app.RocotoApp
+::: rocototop.parser.RocotoParser

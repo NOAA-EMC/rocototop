@@ -2,7 +2,7 @@ import asyncio
 import os
 
 # Add src to path if needed, but assuming installed in editable mode
-from rocotoviewer.app import RocotoApp
+from rocototop.app import RocotoApp
 
 
 async def generate_assets():

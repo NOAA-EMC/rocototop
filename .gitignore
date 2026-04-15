@@ -147,3 +147,7 @@ cython_debug/
 
 # PyCharm
 .idea/
+
+# Generated screenshots
+*.svg
+!docs/screenshots/*.svg

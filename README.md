@@ -1,6 +1,6 @@
-# RocotoViewer
+# RocotoTop
 
-RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time.
+RocotoTop is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time.
 
 ![Overview](docs/screenshots/overview.svg)
 
@@ -23,8 +23,8 @@ RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monit
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/rocotoviewer/rocotoviewer.git
-   cd rocotoviewer
+   git clone https://github.com/rocototop/rocototop.git
+   cd rocototop
    ```
 
 2. Install the package:
@@ -34,10 +34,10 @@ RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monit
 
 ## Usage
 
-Start RocotoViewer by providing the workflow XML and the database file:
+Start RocotoTop by providing the workflow XML and the database file:
 
 ```bash
-rocotoviewer -w my_workflow.xml -d my_database.db
+rocototop -w my_workflow.xml -d my_database.db
 ```
 
 ## Key Bindings
@@ -48,6 +48,9 @@ rocotoviewer -w my_workflow.xml -d my_database.db
 | `r` | Refresh the workflow status |
 | `l` | Toggle between Details and Log tabs |
 | `f` | Toggle Log Follow mode |
+| `/` | Search log (vi-style) |
+| `n` | Next search match |
+| `N` | Previous search match |
 
 ## License
 

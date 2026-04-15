@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
 
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
@@ -28,14 +29,14 @@ from textual.widgets import (
     Tree,
 )
 
-from rocotoviewer.parser import CycleStatus, RocotoParser
+from rocototop.parser import CycleStatus, RocotoParser
 
 logger = logging.getLogger(__name__)
 
 
 class RocotoApp(App[None]):
     """
-    The main Textual application for RocotoViewer.
+    The main Textual application for RocotoTop.
 
     Parameters
     ----------
@@ -91,6 +92,10 @@ class RocotoApp(App[None]):
         Binding("c", "complete", "Mark Complete", show=True),
         Binding("l", "toggle_log", "Toggle Log", show=True),
         Binding("f", "toggle_follow", "Follow Log", show=True),
+        Binding("slash", "open_log_search", "Search Log", show=True),
+        Binding("n", "search_next", "Next Match", show=False),
+        Binding("N", "search_prev", "Prev Match", show=False),
+        Binding("escape", "close_log_search", "Close Search", show=False, priority=True),
     ]
 
     CSS = f"""
@@ -132,6 +137,30 @@ class RocotoApp(App[None]):
         height: 1fr;
     }}
 
+    #log_search_bar {{
+        display: none;
+        dock: bottom;
+        height: auto;
+        padding: 0 1;
+        background: $boost;
+    }}
+
+    #log_search_bar.visible {{
+        display: block;
+    }}
+
+    #log_search_input {{
+        width: 1fr;
+    }}
+
+    #search_status {{
+        height: 1;
+        width: auto;
+        min-width: 12;
+        padding: 0 1;
+        content-align: right middle;
+    }}
+
     #status_bar {{
         height: 1;
         background: $primary;
@@ -160,6 +189,10 @@ class RocotoApp(App[None]):
         self.last_selected_cycle: str | None = None
         self.log_follow: bool = True
         self.current_log_file: str | None = None
+        self._log_lines: list[str] = []
+        self._search_query: str = ""
+        self._search_matches: list[int] = []
+        self._search_index: int = -1
 
     def compose(self) -> ComposeResult:
         """
@@ -182,6 +215,9 @@ class RocotoApp(App[None]):
                         yield Static("Select a task to see details", id="details_panel")
                     with TabPane("Log", id="log_tab"):
                         yield RichLog(id="log_panel", highlight=True, markup=False)
+                        with Horizontal(id="log_search_bar"):
+                            yield Input(placeholder="/search...", id="log_search_input")
+                            yield Static("", id="search_status")
         yield Static("Path: Workflow", id="status_bar")
         yield Footer()
 
@@ -712,6 +748,114 @@ class RocotoApp(App[None]):
         self.log_follow = not self.log_follow
         self.notify(f"Log follow: {'ON' if self.log_follow else 'OFF'}")
 
+    def action_open_log_search(self) -> None:
+        """Open the log search bar and focus the input (vi-style /)."""
+        bar = self.query_one("#log_search_bar")
+        bar.add_class("visible")
+        search_input = self.query_one("#log_search_input", Input)
+        search_input.value = ""
+        search_input.focus()
+
+    def action_close_log_search(self) -> None:
+        """Close the log search bar and clear highlights."""
+        bar = self.query_one("#log_search_bar")
+        bar.remove_class("visible")
+        self._search_query = ""
+        self._search_matches = []
+        self._search_index = -1
+        self.query_one("#search_status", Static).update("")
+        self._redraw_log()
+
+    @on(Input.Submitted, "#log_search_input")
+    def _on_search_submitted(self, event: Input.Submitted) -> None:
+        """Execute search when Enter is pressed in the search input."""
+        query = event.value.strip()
+        if not query:
+            return
+        self._run_log_search(query)
+
+    def _run_log_search(self, query: str) -> None:
+        """
+        Search log lines for the given query and jump to the first match.
+
+        Parameters
+        ----------
+        query : str
+            The search string (treated as a case-insensitive regex).
+        """
+        self._search_query = query
+        try:
+            pattern = re.compile(query, re.IGNORECASE)
+        except re.error:
+            self.notify(f"Invalid regex: {query}", severity="error")
+            return
+
+        self._search_matches = [i for i, line in enumerate(self._log_lines) if pattern.search(line)]
+
+        if not self._search_matches:
+            self.query_one("#search_status", Static).update("No matches")
+            self._search_index = -1
+            self._redraw_log()
+            return
+
+        self._search_index = 0
+        self._jump_to_match()
+
+    def action_search_next(self) -> None:
+        """Jump to the next search match (vi-style n)."""
+        if not self._search_matches:
+            return
+        self._search_index = (self._search_index + 1) % len(self._search_matches)
+        self._jump_to_match()
+
+    def action_search_prev(self) -> None:
+        """Jump to the previous search match (vi-style N)."""
+        if not self._search_matches:
+            return
+        self._search_index = (self._search_index - 1) % len(self._search_matches)
+        self._jump_to_match()
+
+    def _jump_to_match(self) -> None:
+        """Scroll the log panel to the current search match and highlight it."""
+        if self._search_index < 0 or not self._search_matches:
+            return
+
+        match_line = self._search_matches[self._search_index]
+        total = len(self._search_matches)
+        self.query_one("#search_status", Static).update(f"{self._search_index + 1}/{total}")
+
+        self._redraw_log(highlight_line=match_line)
+
+        log_panel = self.query_one("#log_panel", RichLog)
+        log_panel.scroll_to(y=match_line, animate=False)
+
+    def _redraw_log(self, highlight_line: int = -1) -> None:
+        """
+        Redraw the log panel, optionally highlighting a specific line.
+
+        Parameters
+        ----------
+        highlight_line : int
+            Line index to highlight, or -1 for no highlight.
+        """
+        log_panel = self.query_one("#log_panel", RichLog)
+        log_panel.clear()
+
+        try:
+            pattern = re.compile(self._search_query, re.IGNORECASE) if self._search_query else None
+        except re.error:
+            pattern = None
+
+        match_set = set(self._search_matches) if pattern else set()
+
+        for i, line in enumerate(self._log_lines):
+            if i == highlight_line:
+                log_panel.write(f"[black on yellow]{line}[/]", markup=True)
+            elif i in match_set and pattern:
+                log_panel.write(f"[on #333333]{line}[/]", markup=True)
+            else:
+                log_panel.write(line)
+
     def _update_log(self) -> None:
         """
         Initialize log reading for the selected task.
@@ -725,6 +869,11 @@ class RocotoApp(App[None]):
 
         log_panel = self.query_one("#log_panel", RichLog)
         log_panel.clear()
+        self._log_lines = []
+        self._search_query = ""
+        self._search_matches = []
+        self._search_index = -1
+        self.query_one("#search_status", Static).update("")
 
         details = self.last_selected_task.get("details", {})
         log_file = self.parser.resolve_cyclestr(details.get("join") or details.get("stdout") or "", self.last_selected_cycle)
@@ -764,18 +913,20 @@ class RocotoApp(App[None]):
                     f.seek(size - self.MAX_LOG_READ_SIZE)
                     # Skip the first partial line if we seeked
                     f.readline()
-                    self.call_from_thread(
-                        log_panel.write,
-                        f"--- Log truncated. Showing last {self.MAX_LOG_READ_SIZE // 1024}KB ---",
-                    )
+                    truncation_msg = f"--- Log truncated. Showing last {self.MAX_LOG_READ_SIZE // 1024}KB ---"
+                    self.call_from_thread(log_panel.write, truncation_msg)
+                    self._log_lines.append(truncation_msg)
 
                 content = f.read()
                 self.call_from_thread(log_panel.write, content)
+                self._log_lines.extend(content.splitlines())
 
                 while self.current_log_file == log_file and self.is_running:
                     line = f.readline()
                     if line:
-                        self.call_from_thread(log_panel.write, line.rstrip())
+                        stripped = line.rstrip()
+                        self.call_from_thread(log_panel.write, stripped)
+                        self._log_lines.append(stripped)
                         if self.log_follow:
                             self.call_from_thread(log_panel.scroll_end)
                     else:
@@ -786,6 +937,6 @@ class RocotoApp(App[None]):
 
 
 if __name__ == "__main__":
-    from rocotoviewer.cli import main
+    from rocototop.cli import main
 
     main()

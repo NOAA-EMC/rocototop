@@ -1,7 +1,7 @@
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 
 """
-Command-line interface for RocotoViewer.
+Command-line interface for RocotoTop.
 """
 
 from __future__ import annotations
@@ -10,17 +10,17 @@ import argparse
 import os
 import sys
 
-from rocotoviewer import __version__
-from rocotoviewer.app import RocotoApp
+from rocototop import __version__
+from rocototop.app import RocotoApp
 
 
 def main() -> None:
     """
-    Main entry point for the RocotoViewer CLI.
+    Main entry point for the RocotoTop CLI.
 
     This function parses command-line arguments and launches the Textual application.
     """
-    parser = argparse.ArgumentParser(description="RocotoViewer — Textual interface to Rocoto")
+    parser = argparse.ArgumentParser(description="RocotoTop — Textual interface to Rocoto")
     parser.add_argument(
         "-v",
         "--version",

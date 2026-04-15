@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rocotoviewer.app import RocotoApp
+from rocototop.app import RocotoApp
 
 
 @pytest.fixture

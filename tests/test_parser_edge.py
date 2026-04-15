@@ -2,7 +2,7 @@
 .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
 
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_parser_missing_files():

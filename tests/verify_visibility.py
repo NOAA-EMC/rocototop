@@ -1,6 +1,6 @@
 import sqlite3
 
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_all_cycles_show_all_tasks(tmp_path):

@@ -1,4 +1,4 @@
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_metatask_expansion(tmp_path):

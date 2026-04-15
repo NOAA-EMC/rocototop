@@ -1,4 +1,4 @@
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_system_entity_resolution(tmp_path):

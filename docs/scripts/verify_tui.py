@@ -1,7 +1,7 @@
 import asyncio
 import sqlite3
 
-from rocotoviewer.app import RocotoApp
+from rocototop.app import RocotoApp
 
 
 async def take_screenshot():

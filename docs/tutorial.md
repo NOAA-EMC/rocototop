@@ -1,17 +1,17 @@
 # Tutorial: Monitoring Your First Workflow
 
-This tutorial will walk you through a typical session using RocotoViewer to monitor a running workflow.
+This tutorial will walk you through a typical session using RocotoTop to monitor a running workflow.
 
 ## Scenario
 
 Suppose you have a workflow named `TutorialWorkflow` that has been running for several hours. You want to check the status of the `12Z` cycle and see why a specific task failed.
 
-## Step 1: Launch RocotoViewer
+## Step 1: Launch RocotoTop
 
-Open your terminal and run RocotoViewer pointing to your workflow files:
+Open your terminal and run RocotoTop pointing to your workflow files:
 
 ```bash
-rocotoviewer -w example_workflow.xml -d example_workflow.db
+rocototop -w example_workflow.xml -d example_workflow.db
 ```
 
 When the application starts, you will see the **Cycle Tree** on the left with all cycles initially collapsed.
@@ -27,7 +27,7 @@ The **Cycle Tree** allows you to navigate the hierarchy of your workflow.
 
 Expand the `202310271200` (the 12Z cycle). You will see the tasks associated with that cycle appear underneath it.
 
-RocotoViewer uses **icons** and **colors** to help you quickly identify task states:
+RocotoTop uses **icons** and **colors** to help you quickly identify task states:
 *   ✅ **SUCCEEDED**: Task finished successfully.
 *   🏃 **RUNNING**: Task is currently executing.
 *   💀 **DEAD**: Task failed and will not be retried automatically.
@@ -54,7 +54,7 @@ Find the `run_model_A` task for the `202310271200` cycle in the tree. You notice
 *   **Select**: Click on the task in the tree or use arrow keys to highlight it.
 *   **Observe**: The **Selected Task Status** table and the **Details** tab will populate with information specific to this task instance.
 
-The Details Panel shows the **Resolved Command** and **Log Paths** (Stdout/Stderr). RocotoViewer automatically resolves `<cyclestr>` tags based on the selected cycle.
+The Details Panel shows the **Resolved Command** and **Log Paths** (Stdout/Stderr). RocotoTop automatically resolves `<cyclestr>` tags based on the selected cycle.
 
 ## Step 5: View Live Logs
 
@@ -70,7 +70,7 @@ You can see the "Segmentation fault" error right in the TUI!
 
 ## Step 6: Explore Complex Dependencies
 
-RocotoViewer helps you visualize complex dependency logic. In our example, the `verify` task has a multi-part dependency:
+RocotoTop helps you visualize complex dependency logic. In our example, the `verify` task has a multi-part dependency:
 
 ```xml
 <task name="verify" cycledefs="standard">
@@ -97,6 +97,9 @@ When you select the `verify` task, the **Details Panel** lists these dependencie
 | `Tab` | Switch Focus | Between Tree, Filter, and Tabs |
 | `l` | Toggle between Details/Log | Global |
 | `f` | Toggle Log Follow | While Log tab is active |
+| `/` | Search Log | While Log tab is active |
+| `n` / `N` | Next / Prev Match | While searching |
+| `Escape` | Close Search | While searching |
 | `r` | Manual Refresh | Global |
 | `q` | Quit | Global |
 
@@ -104,6 +107,6 @@ When you select the `verify` task, the **Details Panel** lists these dependencie
 
 After fixing the underlying issue (e.g., fixing a data issue that caused the Segfault), you can signal Rocoto to retry.
 
-With `run_model_A` selected, press `w` to "Rewind" the task. RocotoViewer will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `r` to see the state change to `QUEUED` or `RUNNING`.
+With `run_model_A` selected, press `w` to "Rewind" the task. RocotoTop will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `r` to see the state change to `QUEUED` or `RUNNING`.
 
 *(Note: In this demo version, actions show a notification in the UI).*

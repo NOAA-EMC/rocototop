@@ -1,6 +1,6 @@
 import sqlite3
 
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_filtering_logic_preserved_except_first_cycle(tmp_path):

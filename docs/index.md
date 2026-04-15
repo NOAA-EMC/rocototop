@@ -1,10 +1,10 @@
-# RocotoViewer
+# RocotoTop
 
-Welcome to the RocotoViewer documentation!
+Welcome to the RocotoTop documentation!
 
-RocotoViewer is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time. It provides a modern, responsive interface for viewing task statuses, exploring cycle hierarchies, and inspecting task details without leaving your terminal.
+RocotoTop is a powerful Textual-based Terminal User Interface (TUI) for monitoring and interacting with Rocoto workflows in real-time. It provides a modern, responsive interface for viewing task statuses, exploring cycle hierarchies, and inspecting task details without leaving your terminal.
 
-![RocotoViewer Overview](screenshots/overview.svg)
+![RocotoTop Overview](screenshots/overview.svg)
 
 ## Key Features
 

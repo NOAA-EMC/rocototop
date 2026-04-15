@@ -1,6 +1,6 @@
-site_name: RocotoViewer
+site_name: RocotoTop
 site_description: A Textual interface to Rocoto workflows
-site_url: https://rocotoviewer.github.io/rocotoviewer/
+site_url: https://rocototop.github.io/rocototop/
 
 theme:
   name: material

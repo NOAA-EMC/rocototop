@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 @pytest.fixture

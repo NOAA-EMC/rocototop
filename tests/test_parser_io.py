@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from rocotoviewer.parser import RocotoParser
+from rocototop.parser import RocotoParser
 
 
 def test_parse_workflow_oserror(caplog):
