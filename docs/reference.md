@@ -10,6 +10,8 @@ The primary command to launch the TUI.
 
 - `-w, --workflow FILE`: **(Required)** Path to the Rocoto XML workflow definition.
 - `-d, --database FILE`: **(Required)** Path to the Rocoto SQLite database file.
+- `-i, --interval SECONDS`: Refresh interval in seconds (default: 30).
+- `-v, --version`: Show the version and exit.
 - `-h, --help`: Show the help message and exit.
 
 ## Architecture Overview

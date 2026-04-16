@@ -54,16 +54,19 @@ async def test_app_actions(mock_rocoto_files):
 
         # Test boot action
         await pilot.press("b")
-        # Test rewind action
-        await pilot.press("w")
-        # Test complete action
+        # Test rewind action (r = rewind, matching rocoto_viewer)
+        await pilot.press("r")
+        # Test check action (c = rocotocheck, matching rocoto_viewer)
         await pilot.press("c")
+        # Test complete action (C = rocotocomplete)
+        await pilot.press("C")
 
         # Also test with no selection
         app.last_selected_task = None
         await pilot.press("b")
-        await pilot.press("w")
+        await pilot.press("r")
         await pilot.press("c")
+        await pilot.press("C")
 
 
 @pytest.mark.asyncio

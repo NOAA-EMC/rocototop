@@ -11,7 +11,8 @@ RocotoTop is a powerful Textual-based Terminal User Interface (TUI) for monitori
 - **Real-time Monitoring**: Stay updated on your Rocoto tasks and cycles.
 - **Hierarchical View**: Navigate through workflow cycles and tasks easily.
 - **Detailed Inspection**: View task states, exit statuses, durations, and log paths.
-- **Interactive UI**: Filter tasks, refresh data, and perform workflow actions (boot, rewind, complete).
+- **Interactive UI**: Filter tasks, refresh data, and perform workflow actions (check, boot, rewind, run, complete).
+- **Familiar Key Bindings**: Compatible with [NOAA rocoto_viewer.py](https://github.com/NOAA-EMC/global-workflow) for easy migration.
 
 ## Navigation
 

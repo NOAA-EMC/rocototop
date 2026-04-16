@@ -60,7 +60,7 @@ The Details Panel shows the **Resolved Command** and **Log Paths** (Stdout/Stder
 
 If a task is running or has failed, you often want to see the output.
 
-1.  With the task selected, press `l` to switch to the **Log** tab.
+1.  With the task selected, press `t` to switch to the **Log** tab.
 2.  The tab will show a live `tail` of the log file.
 
 ![Log Viewer in Action](screenshots/details_log.svg)
@@ -95,20 +95,30 @@ When you select the `verify` task, the **Details Panel** lists these dependencie
 | `Up/Down` | Move Selection | Cycle Tree |
 | `Enter` | Expand/Collapse or Select | Cycle Tree |
 | `Tab` | Switch Focus | Between Tree, Filter, and Tabs |
-| `l` | Toggle between Details/Log | Global |
+| `→`/`←` | Next/Previous Cycle | Cycle Tree |
+| `x` | Expand/Collapse Metatask | Cycle Tree |
+| `c` | Check Task (rocotocheck) | Global |
+| `b` | Boot Task (rocotoboot) | Global |
+| `r` | Rewind Task (rocotorewind) | Global |
+| `R` | Run Workflow (rocotorun) | Global |
+| `C` | Mark Complete | Global |
+| `W` | Rewind Entire Cycle | Global |
+| `l` | Reload Data | Global |
+| `F` | Find Last Running Cycle | Global |
+| `t` | Toggle between Details/Log | Global |
 | `f` | Toggle Log Follow | While Log tab is active |
 | `/` | Search Log | While Log tab is active |
 | `n` / `N` | Next / Prev Match | While searching |
 | `Escape` | Close Search | While searching |
-| `r` | Manual Refresh | Global |
-| `q` | Quit | Global |
+| `h` | Help | Global |
+| `q` / `Q` | Quit | Global |
 
 ## Step 8: Rewind and Monitor
 
 After fixing the underlying issue (e.g., fixing a data issue that caused the Segfault), you can signal Rocoto to retry.
 
-With `run_model_A` selected, press `w` to "Rewind" the task. RocotoTop will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `r` to see the state change to `QUEUED` or `RUNNING`.
+With `run_model_A` selected, press `r` to "Rewind" the task. RocotoTop will send the command to Rocoto. Wait for the auto-refresh (every 30s) or press `l` to reload data and see the state change to `QUEUED` or `RUNNING`.
 
-To rewind an entire cycle at once, select the cycle node in the tree and press `W` (uppercase). RocotoTop will run `rocotorewind` for every task in that cycle and report the results.
+To rewind an entire cycle at once, select the cycle node in the tree and press `W` (uppercase). RocotoTop will run `rocotorewind` for every task in that cycle and report the results. You can also press `R` to trigger `rocotorun` manually.
 
 *(Note: In this demo version, actions show a notification in the UI).*

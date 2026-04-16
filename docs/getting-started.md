@@ -6,7 +6,7 @@ This guide will help you get RocotoTop up and running on your system.
 
 Before installing RocotoTop, ensure you have the following:
 
-- **Python**: Version 3.9 or higher.
+- **Python**: Version 3.11 or higher.
 - **Rocoto**: You should have a Rocoto workflow XML file and its corresponding SQLite database.
 
 ## Installation
@@ -37,5 +37,6 @@ rocototop -w my_workflow.xml -d my_database.db
 
 - `-w`, `--workflow`: Path to the Rocoto XML workflow file (required).
 - `-d`, `--database`: Path to the Rocoto SQLite database file (required).
+- `-i`, `--interval`: Refresh interval in seconds (default: 30).
 
 Once launched, the TUI will open, and you can start monitoring your workflow!
