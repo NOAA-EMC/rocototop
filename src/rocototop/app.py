@@ -81,7 +81,7 @@ class RocotoApp(App[None]):
     SIDEBAR_WIDTH = "25%"
     MAIN_CONTENT_WIDTH = "75%"
     STATUS_TABLE_HEIGHT = "15%"
-    MAX_LOG_READ_SIZE = 100_000  # 100KB
+    MAX_LOG_READ_SIZE = 1_000_000  # 1MB
 
     # Key bindings aligned with NOAA rocoto_viewer.py for easy migration:
     #   c=check, b=boot, r=rewind, R=run, Q=quit, arrows=cycle nav,
