@@ -13,7 +13,7 @@ import sqlite3
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict
 
 
@@ -812,7 +812,7 @@ class RocotoParser:
             else:
                 try:
                     if cycle_val >= 0:
-                        return datetime.fromtimestamp(cycle_val, tz=timezone.utc).strftime(CYCLE_FORMAT)
+                        return datetime.fromtimestamp(cycle_val, tz=UTC).strftime(CYCLE_FORMAT)
                 except (ValueError, OSError) as e:
                     logger.warning("Failed to parse cycle timestamp %d: %s", cycle_val, e)
         return str(cycle_val) if cycle_val is not None else ""
