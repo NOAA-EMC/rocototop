@@ -50,8 +50,8 @@ async def test_refresh_updates_status(tmp_path):
         conn.commit()
         conn.close()
 
-        # Trigger refresh
-        await pilot.press("r")
+        # Trigger refresh (reload data)
+        await pilot.press("l")
         await pilot.pause(0.5)
 
         # Check if updated

@@ -52,7 +52,7 @@ async def test_log_viewer_toggle_and_content(mock_rocoto_with_logs):
 
         tabbed_content = app.query_one(TabbedContent)
         assert tabbed_content.active == "details_tab"
-        await pilot.press("l")
+        await pilot.press("t")
         assert tabbed_content.active == "log_tab"
 
         log_panel = app.query_one("#log_panel", RichLog)

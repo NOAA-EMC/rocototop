@@ -17,20 +17,29 @@ RocotoTop's interface is divided into three main sections:
 
 ## Key Bindings
 
+RocotoTop's key bindings are designed to be compatible with the [NOAA rocoto_viewer.py](https://github.com/NOAA-EMC/global-workflow), making migration easier for existing users.
+
 | Key | Action | Description |
 | :--- | :--- | :--- |
-| `q` | Quit | Exit the application. |
-| `r` | Refresh | Manually trigger a data refresh from the XML and database. |
-| `b` | Boot | Execute `rocotoboot` for the selected task (Placeholder). |
-| `w` | Rewind | Execute `rocotorewind` for the selected task. |
+| `c` | Check | Execute `rocotocheck` for the selected task. |
+| `b` | Boot | Execute `rocotoboot` for the selected task. |
+| `r` | Rewind | Execute `rocotorewind` for the selected task. |
+| `R` | Run | Execute `rocotorun` (run the workflow engine). |
+| `C` | Complete | Mark the selected task as complete via `rocotocomplete`. |
 | `W` | Rewind Cycle | Execute `rocotorewind` for every task in the selected cycle. |
-| `c` | Complete | Mark the selected task as complete (Placeholder). |
-| `l` | Toggle Log | Toggle between the Details and Log tabs. |
-| `f` | Follow Log | Toggle automatic scrolling to the bottom of the log (Follow mode). |
+| `→` | Next Cycle | Navigate to the next cycle in the tree. |
+| `←` | Prev Cycle | Navigate to the previous cycle in the tree. |
+| `x` | Expand/Collapse | Toggle expand/collapse of the selected metatask node. |
+| `l` | Reload | Reload status data from the XML and database (no rocotorun). |
+| `F` | Find Running | Jump to the last cycle with a running task. |
+| `t` | Toggle Log | Toggle between the Details and Log tabs. |
+| `f` | Follow Log | Toggle automatic scrolling to the bottom of the log. |
+| `h` | Help | Display a help overlay with all key bindings. |
 | `/` | Search Log | Open the log search bar (vi-style). Type a query and press Enter. |
 | `n` | Next Match | Jump to the next search match. |
 | `N` | Prev Match | Jump to the previous search match. |
 | `Escape` | Close Search | Dismiss the search bar and clear highlights. |
+| `q` / `Q` | Quit | Exit the application. |
 
 ## Task Filtering
 
@@ -52,7 +61,7 @@ When you select a task in the Cycle Tree, the Details tab in the inspection pane
 
 ## Log Viewing
 
-RocotoTop allows you to view task logs directly within the TUI. When a task is selected, you can switch to the **Log** tab (or press `l`) to see the log. If the log file exists, it will be loaded and tailed in real-time.
+RocotoTop allows you to view task logs directly within the TUI. When a task is selected, you can switch to the **Log** tab (or press `t`) to see the log. If the log file exists, it will be loaded and tailed in real-time.
 
 ![Log Viewer](screenshots/details_log.svg)
 

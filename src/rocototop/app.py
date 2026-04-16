@@ -83,16 +83,25 @@ class RocotoApp(App[None]):
     STATUS_TABLE_HEIGHT = "15%"
     MAX_LOG_READ_SIZE = 100_000  # 100KB
 
+    # Key bindings aligned with NOAA rocoto_viewer.py for easy migration:
+    #   c=check, b=boot, r=rewind, R=run, Q=quit, arrows=cycle nav,
+    #   l=reload, F=find running, x=expand/collapse, /=search
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
-        Binding("r", "refresh", "Refresh (Pulse)"),
-        Binding("p", "pulse", "Pulse (rocotorun)", show=True),
+        Binding("q,Q", "quit", "Quit"),
+        Binding("c", "check", "Check Task", show=True),
         Binding("b", "boot", "Boot Task", show=True),
-        Binding("w", "rewind", "Rewind Task", show=True),
+        Binding("r", "rewind", "Rewind Task", show=True),
+        Binding("R", "run", "Run (rocotorun)", show=True),
         Binding("W", "rewind_cycle", "Rewind Cycle", show=True),
-        Binding("c", "complete", "Mark Complete", show=True),
-        Binding("l", "toggle_log", "Toggle Log", show=True),
+        Binding("C", "complete", "Mark Complete", show=True),
+        Binding("l", "reload", "Reload Data", show=True),
+        Binding("right", "next_cycle", "Next Cycle", show=True),
+        Binding("left", "prev_cycle", "Prev Cycle", show=True),
+        Binding("F", "find_running", "Find Running", show=True),
+        Binding("x", "toggle_expand", "Expand/Collapse", show=True),
+        Binding("t", "toggle_log", "Toggle Log", show=True),
         Binding("f", "toggle_follow", "Follow Log", show=True),
+        Binding("h", "help", "Help", show=True),
         Binding("slash", "open_log_search", "Search Log", show=True),
         Binding("n", "search_next", "Next Match", show=False),
         Binding("N", "search_prev", "Prev Match", show=False),
@@ -233,7 +242,7 @@ class RocotoApp(App[None]):
         None
         """
         self.set_interval(self.refresh_interval, self._auto_refresh)  # Auto-refresh
-        self.action_refresh()
+        self.action_reload()
 
     def _auto_refresh(self) -> None:
         """
@@ -243,19 +252,19 @@ class RocotoApp(App[None]):
         """
         self._background_refresh(run_pulse=False)
 
-    def action_refresh(self) -> None:
+    def action_reload(self) -> None:
         """
-        Perform a full background refresh including a pulse.
+        Reload status data without running rocotorun.
 
-        Triggered by the 'r' key.
+        Triggered by the 'l' key. Matches rocoto_viewer's <l> behavior.
         """
-        self._background_refresh(run_pulse=True)
+        self._background_refresh(run_pulse=False)
 
-    def action_pulse(self) -> None:
+    def action_run(self) -> None:
         """
-        Perform a pulse (rocotorun) and refresh data.
+        Run rocotorun and refresh data.
 
-        Triggered by the 'p' key.
+        Triggered by the 'R' key. Matches rocoto_viewer's <R> behavior.
         """
         self._background_refresh(run_pulse=True)
 
@@ -691,6 +700,8 @@ class RocotoApp(App[None]):
         """
         Execute rocotoboot for the selected task.
 
+        Triggered by the 'b' key. Matches rocoto_viewer's <b> behavior.
+
         Returns
         -------
         None
@@ -701,21 +712,162 @@ class RocotoApp(App[None]):
         """
         Execute rocotorewind for the selected task.
 
+        Triggered by the 'r' key. Matches rocoto_viewer's <r> behavior.
+
         Returns
         -------
         None
         """
         self._run_rocoto_command("rocotorewind")
 
+    def action_check(self) -> None:
+        """
+        Execute rocotocheck for the selected task and display results.
+
+        Triggered by the 'c' key. Matches rocoto_viewer's <c> behavior.
+
+        Returns
+        -------
+        None
+        """
+        self._run_rocoto_command("rocotocheck")
+
     def action_complete(self) -> None:
         """
         Execute rocotocomplete for the selected task.
+
+        Triggered by the 'C' (shift-c) key.
 
         Returns
         -------
         None
         """
         self._run_rocoto_command("rocotocomplete")
+
+    def action_next_cycle(self) -> None:
+        """
+        Navigate to the next cycle in the tree.
+
+        Triggered by the right arrow key. Matches rocoto_viewer's (->) behavior.
+        """
+        tree = self.query_one("#cycle_tree", Tree)
+        cycle_nodes = list(tree.root.children)
+        if not cycle_nodes:
+            return
+
+        current_idx = -1
+        if self.last_selected_cycle:
+            for i, node in enumerate(cycle_nodes):
+                if str(node.label) == self.last_selected_cycle:
+                    current_idx = i
+                    break
+
+        next_idx = current_idx + 1
+        if next_idx < len(cycle_nodes):
+            target = cycle_nodes[next_idx]
+            target.expand()
+            tree.select_node(target)
+            self.last_selected_cycle = str(target.label)
+            self.last_selected_task = None
+            self._update_status_bar()
+
+    def action_prev_cycle(self) -> None:
+        """
+        Navigate to the previous cycle in the tree.
+
+        Triggered by the left arrow key. Matches rocoto_viewer's (<-) behavior.
+        """
+        tree = self.query_one("#cycle_tree", Tree)
+        cycle_nodes = list(tree.root.children)
+        if not cycle_nodes:
+            return
+
+        current_idx = len(cycle_nodes)
+        if self.last_selected_cycle:
+            for i, node in enumerate(cycle_nodes):
+                if str(node.label) == self.last_selected_cycle:
+                    current_idx = i
+                    break
+
+        prev_idx = current_idx - 1
+        if prev_idx >= 0:
+            target = cycle_nodes[prev_idx]
+            target.expand()
+            tree.select_node(target)
+            self.last_selected_cycle = str(target.label)
+            self.last_selected_task = None
+            self._update_status_bar()
+
+    def action_find_running(self) -> None:
+        """
+        Jump to the last cycle that has a RUNNING task.
+
+        Triggered by the 'F' key. Matches rocoto_viewer's <F> behavior.
+        """
+        tree = self.query_one("#cycle_tree", Tree)
+        cycle_nodes = list(tree.root.children)
+
+        target_cycle = None
+        for cycle_info in reversed(self.all_data):
+            for task in cycle_info["tasks"]:
+                if task["state"] == "RUNNING":
+                    target_cycle = cycle_info["cycle"]
+                    break
+            if target_cycle:
+                break
+
+        if not target_cycle:
+            self.notify("No running tasks found", severity="warning")
+            return
+
+        for node in cycle_nodes:
+            if str(node.label) == target_cycle:
+                node.expand()
+                tree.select_node(node)
+                self.last_selected_cycle = target_cycle
+                self.last_selected_task = None
+                self._update_status_bar()
+                self.notify(f"Jumped to cycle {target_cycle}")
+                return
+
+    def action_toggle_expand(self) -> None:
+        """
+        Toggle expand/collapse of the currently selected tree node.
+
+        Triggered by the 'x' key. Matches rocoto_viewer's <x> behavior.
+        """
+        tree = self.query_one("#cycle_tree", Tree)
+        node = tree.cursor_node
+        if node and node.allow_expand:
+            node.toggle()
+
+    def action_help(self) -> None:
+        """
+        Display a help notification with key bindings.
+
+        Triggered by the 'h' key. Matches rocoto_viewer's <h> behavior.
+        """
+        help_text = (
+            "Key Bindings (rocoto_viewer compatible):\n"
+            "  c  - rocotocheck on selected task\n"
+            "  b  - rocotoboot on selected task\n"
+            "  r  - rocotorewind on selected task\n"
+            "  R  - rocotorun (run workflow)\n"
+            "  C  - rocotocomplete on selected task\n"
+            "  W  - rewind entire cycle\n"
+            "  →  - next cycle\n"
+            "  ←  - previous cycle\n"
+            "  x  - expand/collapse metatask\n"
+            "  l  - reload status data\n"
+            "  F  - find last running cycle\n"
+            "  t  - toggle log panel\n"
+            "  f  - toggle log follow\n"
+            "  /  - search log\n"
+            "  n/N - next/prev search match\n"
+            "  h  - this help\n"
+            "  q/Q - quit"
+        )
+        self.notify(help_text, timeout=15)
 
     def action_rewind_cycle(self) -> None:
         """

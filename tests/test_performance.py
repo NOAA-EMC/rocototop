@@ -88,7 +88,7 @@ async def test_tree_node_reuse(mock_rocoto_large_log):
         initial_node_id = id(task_node)
 
         # Trigger an update
-        app.action_refresh()
+        app.action_reload()
         await pilot.pause(0.5)
 
         # Get the task node again

@@ -46,8 +46,8 @@ async def test_pulse_runs_rocotorun(mock_rocoto_files):
             # Reset mock after initial refresh on mount
             mock_run.reset_mock()
 
-            # Press 'p' for pulse
-            await pilot.press("p")
+            # Press 'R' for run (rocotorun)
+            await pilot.press("R")
             await pilot.pause(0.5)
 
             # Verify rocotorun was called
@@ -73,8 +73,8 @@ async def test_refresh_runs_rocotorun(mock_rocoto_files):
             # Reset mock
             mock_run.reset_mock()
 
-            # Press 'r' for refresh
-            await pilot.press("r")
+            # Press 'R' for run (rocotorun) — matches rocoto_viewer's <R> key
+            await pilot.press("R")
             await pilot.pause(0.5)
 
             # Verify rocotorun was called

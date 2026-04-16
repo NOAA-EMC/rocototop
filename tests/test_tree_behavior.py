@@ -67,7 +67,7 @@ async def test_tree_expansion_on_select(mock_rocoto_data):
         assert cycle_node.is_expanded is True
 
         # Refresh and check if it stays expanded
-        app.action_refresh()
+        app.action_reload()
         await pilot.pause(0.5)
 
         cycle_node = tree.root.children[0]  # Get it again just in case

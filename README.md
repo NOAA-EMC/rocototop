@@ -46,15 +46,26 @@ rocototop -w my_workflow.xml -d my_database.db
 
 ## Key Bindings
 
+Key bindings are compatible with [NOAA rocoto_viewer.py](https://github.com/NOAA-EMC/global-workflow) for easy migration.
+
 | Key | Action |
 | --- | --- |
-| `q` | Quit the application |
-| `r` | Refresh the workflow status |
-| `l` | Toggle between Details and Log tabs |
+| `c` | Check task (rocotocheck) |
+| `b` | Boot task (rocotoboot) |
+| `r` | Rewind task (rocotorewind) |
+| `R` | Run workflow (rocotorun) |
+| `C` | Mark task complete |
+| `W` | Rewind entire cycle |
+| `→`/`←` | Next/Previous cycle |
+| `x` | Expand/collapse metatask |
+| `l` | Reload status data |
+| `F` | Find last running cycle |
+| `t` | Toggle Details/Log tabs |
 | `f` | Toggle Log Follow mode |
+| `h` | Help |
 | `/` | Search log (vi-style) |
-| `n` | Next search match |
-| `N` | Previous search match |
+| `n`/`N` | Next/Previous search match |
+| `q`/`Q` | Quit |
 
 ## License
 

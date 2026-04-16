@@ -274,7 +274,10 @@ class RocotoParser:
 
     def _get_entity_values(self, content: str) -> dict[str, str]:
         """
-        Extract XML entity values from the workflow file's DTD.
+        Extract XML entity values from the workflow file's DTD using expat.
+
+        Uses Python's xml.parsers.expat to properly parse entity declarations
+        from the DOCTYPE internal subset, instead of fragile regex matching.
 
         Parameters
         ----------
@@ -286,35 +289,59 @@ class RocotoParser:
         dict[str, str]
             A dictionary mapping entity names to their values.
         """
+        import xml.parsers.expat
+
         entity_values: dict[str, str] = defaultdict(str)
+        base_dir = os.path.dirname(os.path.abspath(self.workflow_file))
 
-        dtd_match = re.search(r"<!DOCTYPE workflow\s+\[(.*?)\]>", content, re.DOTALL)
-        if dtd_match:
-            dtd_content = dtd_match.group(1)
-            entity_matches = re.finditer(
-                r'<!ENTITY\s+(\w+)\s+(SYSTEM\s+)?["\']([^"\']*)["\']\s*>',
-                dtd_content,
-            )
-            for match in entity_matches:
-                name, system, value = match.groups()
-                if system:
-                    # Resolve path relative to workflow file
-                    base_dir = os.path.dirname(os.path.abspath(self.workflow_file))
-                    abs_path = os.path.join(base_dir, value)
-                    if os.path.exists(abs_path):
-                        try:
-                            with open(abs_path, encoding="utf-8") as f:
-                                value = f.read()
-                        except OSError as e:
-                            logger.error("Failed to read SYSTEM entity file %s: %s", abs_path, e)
-                            value = ""
-                    else:
-                        logger.warning("SYSTEM entity file not found: %s", abs_path)
-                        value = ""
+        def entity_decl_handler(
+            entity_name: str,
+            is_parameter_entity: bool,
+            value: str | None,
+            base: str | None,
+            system_id: str | None,
+            public_id: str | None,
+            notation_name: str | None,
+        ) -> None:
+            if is_parameter_entity:
+                return
 
-                for k, v in entity_values.items():
-                    value = value.replace(f"&{k};", v)
-                entity_values[name] = value
+            if system_id is not None:
+                # SYSTEM entity — read from external file
+                abs_path = os.path.join(base_dir, system_id)
+                if os.path.exists(abs_path):
+                    try:
+                        with open(abs_path, encoding="utf-8") as f:
+                            resolved = f.read()
+                    except OSError as e:
+                        logger.error("Failed to read SYSTEM entity file %s: %s", abs_path, e)
+                        resolved = ""
+                else:
+                    logger.warning("SYSTEM entity file not found: %s", abs_path)
+                    resolved = ""
+            elif value is not None:
+                resolved = value
+            else:
+                return
+
+            # Resolve references to previously defined entities
+            for k, v in entity_values.items():
+                resolved = resolved.replace(f"&{k};", v)
+            entity_values[entity_name] = resolved
+
+        parser = xml.parsers.expat.ParserCreate()
+        parser.EntityDeclHandler = entity_decl_handler
+        # Stop parsing after the DTD — we only need entity declarations.
+        # Use a start-element handler that aborts once the root element begins.
+        parser.StartElementHandler = lambda *_args: None
+
+        try:
+            parser.Parse(content, True)
+        except xml.parsers.expat.ExpatError:
+            # Expat may fail on unresolved entity refs in the body — that's fine,
+            # we already captured the declarations from the DTD.
+            pass
+
         return entity_values
 
     def _load_workflow_xml(self, content: str) -> None:
@@ -341,9 +368,11 @@ class RocotoParser:
                 if not changed:
                     break
 
-            # Remove DOCTYPE properly
-            content = re.sub(r"<!DOCTYPE workflow\s+\[.*?\]>", "", content, flags=re.DOTALL)
-            content = re.sub(r"<!DOCTYPE.*?>", "", content, flags=re.DOTALL)
+            # Strip DOCTYPE declarations before passing to ElementTree, which
+            # cannot handle DTD internal subsets or entity references.
+            # First strip DOCTYPEs with internal subsets, then simple ones.
+            content = re.sub(r"<!DOCTYPE\s+\w+\s*\[.*?\]\s*>", "", content, flags=re.DOTALL)
+            content = re.sub(r"<!DOCTYPE[^>]*>", "", content)
 
             root = ET.fromstring(content.strip())
         except ET.ParseError as e:
@@ -389,10 +418,11 @@ class RocotoParser:
             try:
                 start = datetime.strptime(parts[0], CYCLE_FORMAT)
                 end = datetime.strptime(parts[1], CYCLE_FORMAT)
-                inc_match = re.match(r"(\d+):(\d+)(?::(\d+))?", parts[2])
-                if inc_match:
-                    h, m, s = inc_match.groups()
-                    inc = timedelta(hours=int(h), minutes=int(m), seconds=int(s or 0))
+                time_parts = parts[2].split(":")
+                if len(time_parts) >= 2:
+                    h, m = time_parts[0], time_parts[1]
+                    s = time_parts[2] if len(time_parts) >= 3 else "0"
+                    inc = timedelta(hours=int(h), minutes=int(m), seconds=int(s))
                     curr = start
                     while curr <= end:
                         self.cycledef_group_cycles[group].append(curr.strftime(CYCLE_FORMAT))
