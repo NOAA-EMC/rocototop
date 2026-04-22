@@ -17,6 +17,8 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "textual",
     "rich",
+    "aiosqlite",
+    "aiofiles",
 ]
 
 [project.optional-dependencies]

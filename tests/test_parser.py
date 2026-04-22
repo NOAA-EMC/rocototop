@@ -35,22 +35,24 @@ def mock_rocoto_files(tmp_path):
     return str(workflow_file), str(db_file)
 
 
-def test_parser_init(mock_rocoto_files):
+@pytest.mark.asyncio
+async def test_parser_init(mock_rocoto_files):
     wf, db = mock_rocoto_files
     parser = RocotoParser(wf, db)
     assert parser.workflow_file == wf
     assert parser.database_file == db
-    parser.parse_workflow()
+    await parser.parse_workflow()
     assert len(parser.tasks_ordered) > 0
     assert "task1" in parser.tasks_ordered
 
 
-def test_parser_get_status(mock_rocoto_files):
+@pytest.mark.asyncio
+async def test_parser_get_status(mock_rocoto_files):
     wf, db = mock_rocoto_files
     parser = RocotoParser(wf, db)
     # We should call parse_workflow to have task definitions
-    parser.parse_workflow()
-    status = parser.get_status()
+    await parser.parse_workflow()
+    status = await parser.get_status()
     assert len(status) == 1
     assert status[0]["cycle"] == "202301010000"
     assert len(status[0]["tasks"]) == 1
@@ -66,17 +68,18 @@ def test_parser_cycle_parsing():
     assert parser._parse_cycle(1672531200) == "202301010000"
 
 
-def test_parser_xml_caching(tmp_path):
+@pytest.mark.asyncio
+async def test_parser_xml_caching(tmp_path):
     workflow_file = tmp_path / "workflow.xml"
     workflow_file.write_text("<workflow><task name='t1'></task></workflow>")
 
     parser = RocotoParser(str(workflow_file), "db")
-    parser.parse_workflow()
+    await parser.parse_workflow()
     assert parser._last_parsed_mtime is not None
     mtime1 = parser._last_parsed_mtime
 
     # Second call should skip parsing
-    parser.parse_workflow()
+    await parser.parse_workflow()
     assert parser._last_parsed_mtime == mtime1
 
     # Modify file
@@ -85,16 +88,17 @@ def test_parser_xml_caching(tmp_path):
     workflow_file.write_text("<workflow><task name='t1'></task><task name='t2'></task></workflow>")
     os.utime(workflow_file, (new_mtime, new_mtime))
 
-    parser.parse_workflow()
+    await parser.parse_workflow()
     assert parser._last_parsed_mtime == new_mtime
     assert "t2" in parser.tasks_dict
 
 
-def test_get_status_structure(mock_rocoto_files):
+@pytest.mark.asyncio
+async def test_get_status_structure(mock_rocoto_files):
     wf, db = mock_rocoto_files
     parser = RocotoParser(wf, db)
-    parser.parse_workflow()
-    status = parser.get_status()
+    await parser.parse_workflow()
+    status = await parser.get_status()
     assert isinstance(status, list)
     assert len(status) > 0
     cycle = status[0]
@@ -106,11 +110,12 @@ def test_get_status_structure(mock_rocoto_files):
     assert expected_keys.issubset(task.keys())
 
 
-def test_parser_get_summary(mock_rocoto_files):
+@pytest.mark.asyncio
+async def test_parser_get_summary(mock_rocoto_files):
     wf, db = mock_rocoto_files
     parser = RocotoParser(wf, db)
-    parser.parse_workflow()
-    status = parser.get_status()
+    await parser.parse_workflow()
+    status = await parser.get_status()
 
     summary = parser.get_summary(status)
     assert summary == {"SUCCEEDED": 1}

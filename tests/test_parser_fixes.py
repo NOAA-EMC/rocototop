@@ -1,7 +1,9 @@
+import pytest
 from rocototop.parser import RocotoParser
 
 
-def test_system_entity_resolution(tmp_path):
+@pytest.mark.asyncio
+async def test_system_entity_resolution(tmp_path):
     # Create an external file for the entity
     ext_file = tmp_path / "tasks.xml"
     ext_file.write_text('<task name="ext_task"></task>')
@@ -18,12 +20,13 @@ def test_system_entity_resolution(tmp_path):
     workflow_file.write_text(workflow_content)
 
     parser = RocotoParser(str(workflow_file), "dummy.db")
-    parser.parse_workflow()
+    await parser.parse_workflow()
 
     assert "ext_task" in parser.tasks_dict
 
 
-def test_tasks_tag_parsing(tmp_path):
+@pytest.mark.asyncio
+async def test_tasks_tag_parsing(tmp_path):
     workflow_file = tmp_path / "workflow.xml"
     workflow_content = """<?xml version="1.0"?>
 <workflow name="test">
@@ -41,7 +44,7 @@ def test_tasks_tag_parsing(tmp_path):
     workflow_file.write_text(workflow_content)
 
     parser = RocotoParser(str(workflow_file), "dummy.db")
-    parser.parse_workflow()
+    await parser.parse_workflow()
 
     assert "task_in_group" in parser.tasks_dict
     assert "task_1" in parser.tasks_dict

@@ -1,3 +1,4 @@
+import pytest
 from rocototop.parser import RocotoParser
 
 
@@ -18,7 +19,8 @@ def test_resolve_cyclestr():
     assert parser.resolve_cyclestr("Hour: <cyclestr offset='01:00:00'>@H</cyclestr>", cycle) == "Hour: 01"
 
 
-def test_entity_substitution_in_xml(tmp_path):
+@pytest.mark.asyncio
+async def test_entity_substitution_in_xml(tmp_path):
     wf = tmp_path / "wf.xml"
     wf.write_text("""<?xml version="1.0"?>
 <!DOCTYPE workflow [
@@ -31,5 +33,5 @@ def test_entity_substitution_in_xml(tmp_path):
   </task>
 </workflow>""")
     parser = RocotoParser(str(wf), "db")
-    parser.parse_workflow()
+    await parser.parse_workflow()
     assert parser.tasks_dict["test"].command == "/path/to/home/bin/run"

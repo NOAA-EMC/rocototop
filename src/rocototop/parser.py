@@ -6,6 +6,7 @@ Parser for Rocoto workflow XML files and SQLite databases.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -15,6 +16,9 @@ from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict
+
+import aiofiles
+import aiosqlite
 
 
 class TaskDetails(TypedDict):
@@ -242,9 +246,9 @@ class RocotoParser:
         self.cycledef_group_cycles: dict[str, set[str]] = defaultdict(set)
         self._last_parsed_mtime: float | None = None
 
-    def parse_workflow(self) -> None:
+    async def parse_workflow(self) -> None:
         """
-        Parse the XML workflow file.
+        Parse the XML workflow file asynchronously.
 
         This method reads the workflow file, extracts entity values,
         and then loads the XML structure while performing entity
@@ -254,23 +258,26 @@ class RocotoParser:
         -------
         None
         """
-        if not os.path.exists(self.workflow_file):
+        if not await asyncio.to_thread(os.path.exists, self.workflow_file):
             return
 
         try:
-            mtime = os.path.getmtime(self.workflow_file)
+            mtime = await asyncio.to_thread(os.path.getmtime, self.workflow_file)
             if self._last_parsed_mtime is not None and mtime <= self._last_parsed_mtime:
                 return
 
-            with open(self.workflow_file, encoding="utf-8") as f:
-                content = f.read()
+            async with aiofiles.open(self.workflow_file, encoding="utf-8") as f:
+                content = await f.read()
             self._last_parsed_mtime = mtime
         except OSError as e:
             logger.error("Failed to read workflow XML file: %s", e)
             return
 
-        self.entity_values = self._get_entity_values(content)
-        self._load_workflow_xml(content)
+        # Entity extraction involves potential synchronous I/O for SYSTEM entities,
+        # so we run it in a thread to keep the event loop free.
+        self.entity_values = await asyncio.to_thread(self._get_entity_values, content)
+        # XML parsing and expansion is CPU-bound
+        await asyncio.to_thread(self._load_workflow_xml, content)
 
     def _get_entity_values(self, content: str) -> dict[str, str]:
         """
@@ -740,31 +747,31 @@ class RocotoParser:
                 summary[task["state"]] += 1
         return dict(summary)
 
-    def get_status(self) -> list[CycleStatus]:
+    async def get_status(self) -> list[CycleStatus]:
         """
-        Query the SQLite database for the status of tasks and cycles.
+        Query the SQLite database for the status of tasks and cycles asynchronously.
 
         Returns
         -------
         list[CycleStatus]
             A list of cycle-task status information.
         """
-        if not os.path.exists(self.database_file):
+        if not await asyncio.to_thread(os.path.exists, self.database_file):
             return []
 
         try:
-            connection = sqlite3.connect(self.database_file)
-            connection.row_factory = sqlite3.Row
-            c = connection.cursor()
-            cycles_raw = [row["cycle"] for row in c.execute("SELECT cycle FROM cycles ORDER BY cycle ASC")]
-            jobs_data = defaultdict(dict)
-            q = c.execute(
-                "SELECT taskname, cycle, state, exit_status, duration, tries, jobid FROM jobs",
-            )
-            for row in q:
-                jobs_data[row["cycle"]][row["taskname"]] = dict(row)
-            connection.close()
-        except sqlite3.Error as e:
+            async with aiosqlite.connect(self.database_file) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute("SELECT cycle FROM cycles ORDER BY cycle ASC") as cursor:
+                    cycles_raw = [row["cycle"] for row in await cursor.fetchall()]
+
+                jobs_data = defaultdict(dict)
+                async with db.execute(
+                    "SELECT taskname, cycle, state, exit_status, duration, tries, jobid FROM jobs",
+                ) as cursor:
+                    async for row in cursor:
+                        jobs_data[row["cycle"]][row["taskname"]] = dict(row)
+        except (sqlite3.Error, OSError) as e:
             logger.error("Database error while fetching status: %s", e)
             return []
 

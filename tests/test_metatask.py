@@ -1,7 +1,9 @@
+import pytest
 from rocototop.parser import RocotoParser
 
 
-def test_metatask_expansion(tmp_path):
+@pytest.mark.asyncio
+async def test_metatask_expansion(tmp_path):
     workflow_file = tmp_path / "workflow.xml"
     db_file = tmp_path / "rocoto.db"
 
@@ -18,7 +20,7 @@ def test_metatask_expansion(tmp_path):
     workflow_file.write_text(workflow_content)
 
     parser = RocotoParser(str(workflow_file), str(db_file))
-    parser.parse_workflow()
+    await parser.parse_workflow()
 
     # Expected tasks:
     # post_01_00, post_01_06, post_02_00, post_02_06
@@ -38,7 +40,8 @@ def test_metatask_expansion(tmp_path):
     assert len(parser.metatask_list["ensemble"]) == 4
 
 
-def test_parallel_vars_expansion(tmp_path):
+@pytest.mark.asyncio
+async def test_parallel_vars_expansion(tmp_path):
     workflow_file = tmp_path / "workflow.xml"
     db_file = tmp_path / "rocoto.db"
 
@@ -53,7 +56,7 @@ def test_parallel_vars_expansion(tmp_path):
     workflow_file.write_text(workflow_content)
 
     parser = RocotoParser(str(workflow_file), str(db_file))
-    parser.parse_workflow()
+    await parser.parse_workflow()
 
     task_names = parser.tasks_ordered
     assert len(task_names) == 2
