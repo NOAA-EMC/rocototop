@@ -1,15 +1,19 @@
 from unittest.mock import patch
 
+import pytest
+
 from rocototop.parser import RocotoParser
 
 
-def test_parse_workflow_oserror(caplog):
+@pytest.mark.asyncio
+async def test_parse_workflow_oserror(caplog):
     parser = RocotoParser("wf.xml", "db.db")
-    with patch("os.path.exists", return_value=True):
-        with patch("os.path.getmtime", return_value=12345.6):
-            with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
-                parser.parse_workflow()
-                assert "Failed to read workflow XML file: Mocked OS Error" in caplog.text
+    # In async version, we need to patch aiofiles.open or the wrapped thread call
+    with patch("asyncio.to_thread") as mock_thread:
+        mock_thread.side_effect = [True, 12345.6, {}, None]  # exists, mtime, get_entities, load_xml
+        with patch("aiofiles.open", side_effect=OSError("Mocked OS Error")):
+            await parser.parse_workflow()
+            assert "Failed to read workflow XML file: Mocked OS Error" in caplog.text
 
 
 def test_load_workflow_xml_oserror_redundant_check():

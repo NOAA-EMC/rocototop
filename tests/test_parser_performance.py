@@ -1,10 +1,13 @@
 import sqlite3
 import time
 
+import pytest
+
 from rocototop.parser import RocotoParser
 
 
-def test_parser_performance_large_workflow(tmp_path):
+@pytest.mark.asyncio
+async def test_parser_performance_large_workflow(tmp_path):
     """
     Test RocotoParser performance with a large number of cycles and tasks.
     This ensures that the O(1) lookup optimization is effective.
@@ -51,12 +54,12 @@ def test_parser_performance_large_workflow(tmp_path):
 
     # Measure parse time
     start_time = time.time()
-    parser.parse_workflow()
+    await parser.parse_workflow()
     parse_duration = time.time() - start_time
 
     # Measure status fetching time
     start_time = time.time()
-    status = parser.get_status()
+    status = await parser.get_status()
     fetch_duration = time.time() - start_time
 
     assert len(status) == num_cycles

@@ -10,9 +10,9 @@ import asyncio
 import logging
 import os
 import re
-import time
 from typing import Any
 
+import aiofiles
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -277,7 +277,7 @@ class RocotoApp(App[None]):
         Perform background refresh of data.
 
         This worker parses the workflow XML and queries the database
-        using asyncio.to_thread to avoid blocking the UI.
+        asynchronously.
 
         Parameters
         ----------
@@ -294,9 +294,9 @@ class RocotoApp(App[None]):
                 await self._run_pulse()
                 self.notify("Pulse (rocotorun) completed")
 
-            # Run blocking I/O in a thread
-            await asyncio.to_thread(self.parser.parse_workflow)
-            data = await asyncio.to_thread(self.parser.get_status)
+            # Parser methods are now async
+            await self.parser.parse_workflow()
+            data = await self.parser.get_status()
             self.all_data = list(data)
 
             if not run_pulse:
@@ -956,7 +956,7 @@ class RocotoApp(App[None]):
     @work
     async def _rewind_cycle_tasks(self, cycle: str, tasks: list[str]) -> None:
         """
-        Run rocotorewind for each task in a cycle in a background thread.
+        Run rocotorewind for each task in a cycle asynchronously.
 
         Parameters
         ----------
@@ -1221,18 +1221,13 @@ class RocotoApp(App[None]):
             self.current_log_file = None
             return
 
-        if not os.path.exists(log_file):
-            log_panel.write(f"Log file not found: {log_file}")
-            self.current_log_file = None
-            return
-
         self.current_log_file = log_file
         self.tail_log(log_file)
 
-    @work(thread=True, exclusive=True)
-    def tail_log(self, log_file: str) -> None:
+    @work(exclusive=True)
+    async def tail_log(self, log_file: str) -> None:
         """
-        Tail the log file in a background thread.
+        Tail the log file asynchronously.
 
         Parameters
         ----------
@@ -1245,33 +1240,37 @@ class RocotoApp(App[None]):
         """
         log_panel = self.query_one("#log_panel", RichLog)
         try:
-            size = os.path.getsize(log_file)
-            with open(log_file, encoding="utf-8", errors="replace") as f:
+            if not await asyncio.to_thread(os.path.exists, log_file):
+                log_panel.write(f"Log file not found: {log_file}")
+                return
+
+            size = await asyncio.to_thread(os.path.getsize, log_file)
+            async with aiofiles.open(log_file, encoding="utf-8", errors="replace") as f:
                 if size > self.MAX_LOG_READ_SIZE:
-                    f.seek(size - self.MAX_LOG_READ_SIZE)
+                    await f.seek(size - self.MAX_LOG_READ_SIZE)
                     # Skip the first partial line if we seeked
-                    f.readline()
+                    await f.readline()
                     truncation_msg = f"--- Log truncated. Showing last {self.MAX_LOG_READ_SIZE // 1024}KB ---"
-                    self.call_from_thread(log_panel.write, truncation_msg)
+                    log_panel.write(truncation_msg)
                     self._log_lines.append(truncation_msg)
 
-                content = f.read()
-                self.call_from_thread(log_panel.write, content)
+                content = await f.read()
+                log_panel.write(content)
                 self._log_lines.extend(content.splitlines())
 
                 while self.current_log_file == log_file and self.is_running:
-                    line = f.readline()
+                    line = await f.readline()
                     if line:
                         stripped = line.rstrip()
-                        self.call_from_thread(log_panel.write, stripped)
+                        log_panel.write(stripped)
                         self._log_lines.append(stripped)
                         if self.log_follow:
-                            self.call_from_thread(log_panel.scroll_end)
+                            log_panel.scroll_end()
                     else:
-                        time.sleep(0.1)
+                        await asyncio.sleep(0.1)
         except Exception as e:
             if self.is_running:
-                self.call_from_thread(self.notify, f"Error reading log: {e}", severity="error")
+                self.notify(f"Error reading log: {e}", severity="error")
 
 
 if __name__ == "__main__":
