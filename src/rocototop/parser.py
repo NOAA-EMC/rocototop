@@ -276,8 +276,40 @@ class RocotoParser:
         # Entity extraction involves potential synchronous I/O for SYSTEM entities,
         # so we run it in a thread to keep the event loop free.
         self.entity_values = await asyncio.to_thread(self._get_entity_values, content)
+
+        # We need multiple passes if parameter entities define other entities
+        # or if general entities are used within other entities.
+        for _ in range(ENTITY_RECURSION_LIMIT):
+            new_content = self._resolve_parameter_entities(content, self.entity_values)
+            if new_content == content:
+                break
+            content = new_content
+            self.entity_values = await asyncio.to_thread(self._get_entity_values, content)
+
         # XML parsing and expansion is CPU-bound
         await asyncio.to_thread(self._load_workflow_xml, content)
+
+    def _resolve_parameter_entities(self, content: str, entities: dict[str, str]) -> str:
+        """
+        Simple resolution of parameter entities in the content.
+
+        Parameters
+        ----------
+        content : str
+            The XML content.
+        entities : dict[str, str]
+            Extracted entity values.
+
+        Returns
+        -------
+        str
+            Content with parameter entities resolved.
+        """
+        for k, v in entities.items():
+            # Parameter entities are used as %name;
+            if f"%{k};" in content:
+                content = content.replace(f"%{k};", v)
+        return content
 
     def _get_entity_values(self, content: str) -> dict[str, str]:
         """
@@ -310,30 +342,34 @@ class RocotoParser:
             public_id: str | None,
             notation_name: str | None,
         ) -> None:
-            if is_parameter_entity:
-                return
-
+            resolved = ""
             if system_id is not None:
                 # SYSTEM entity — read from external file
-                abs_path = os.path.join(base_dir, system_id)
+                abs_path = os.path.normpath(os.path.join(base_dir, system_id))
                 if os.path.exists(abs_path):
                     try:
                         with open(abs_path, encoding="utf-8") as f:
                             resolved = f.read()
                     except OSError as e:
                         logger.error("Failed to read SYSTEM entity file %s: %s", abs_path, e)
-                        resolved = ""
                 else:
                     logger.warning("SYSTEM entity file not found: %s", abs_path)
-                    resolved = ""
             elif value is not None:
                 resolved = value
             else:
                 return
 
-            # Resolve references to previously defined entities
-            for k, v in entity_values.items():
-                resolved = resolved.replace(f"&{k};", v)
+            # Resolve references to previously defined entities to support nested entities
+            # We do this up to ENTITY_RECURSION_LIMIT times to handle potential nesting
+            for _ in range(ENTITY_RECURSION_LIMIT):
+                changed = False
+                for k, v in entity_values.items():
+                    if f"&{k};" in resolved:
+                        resolved = resolved.replace(f"&{k};", v)
+                        changed = True
+                if not changed:
+                    break
+
             entity_values[entity_name] = resolved
 
         parser = xml.parsers.expat.ParserCreate()
@@ -636,7 +672,7 @@ class RocotoParser:
             deps.append(dep)
         return deps
 
-    def resolve_cyclestr(self, text: str, cycle: str) -> str:
+    def resolve_cyclestr(self, text: str, cycle: str | datetime) -> str:
         """
         Resolve Rocoto <cyclestr> tags in a string.
 
@@ -644,18 +680,24 @@ class RocotoParser:
         ----------
         text : str
             The string containing <cyclestr> tags.
-        cycle : str
-            The cycle string to use for resolution.
+        cycle : str | datetime
+            The cycle string or datetime object to use for resolution.
 
         Returns
         -------
         str
             The resolved string.
         """
-        try:
-            dt = datetime.strptime(cycle, CYCLE_FORMAT)
-        except ValueError:
+        if not text or "<cyclestr" not in text:
             return text
+
+        if isinstance(cycle, datetime):
+            dt = cycle
+        else:
+            try:
+                dt = datetime.strptime(cycle, CYCLE_FORMAT)
+            except ValueError:
+                return text
 
         def replace_cyclestr(match: re.Match) -> str:
             full_tag = match.group(0)
@@ -751,10 +793,13 @@ class RocotoParser:
         """
         Query the SQLite database for the status of tasks and cycles asynchronously.
 
+        This method also performs cycle-specific string resolution (e.g., resolving
+        <cyclestr> tags) for task metadata to ensure the UI thread remains responsive.
+
         Returns
         -------
         list[CycleStatus]
-            A list of cycle-task status information.
+            A list of cycle-task status information with resolved metadata.
         """
         if not await asyncio.to_thread(os.path.exists, self.database_file):
             return []
@@ -778,6 +823,11 @@ class RocotoParser:
         result: list[CycleStatus] = []
         for cycle_raw in cycles_raw:
             cycle_str = self._parse_cycle(cycle_raw)
+            try:
+                cycle_dt = datetime.strptime(cycle_str, CYCLE_FORMAT)
+            except ValueError:
+                cycle_dt = datetime.now(tz=UTC)  # Fallback
+
             tasks_status = []
 
             # Determine tasks defined for this cycle in the XML
@@ -815,19 +865,60 @@ class RocotoParser:
                 task_def = self.tasks_dict.get(tname)
                 job = jobs_data.get(cycle_raw, {}).get(tname)
 
-                task_info = {
+                # Resolve cycle-specific strings in the background worker
+                details = task_def.to_dict() if task_def else {}
+                if details:
+                    details = self._resolve_task_details(details, cycle_dt)
+
+                task_info: TaskStatus = {
                     "task": tname,
                     "state": job["state"] if job else "WAITING",
                     "exit": job["exit_status"] if job else None,
                     "duration": job["duration"] if job else None,
                     "tries": job["tries"] if job else 0,
                     "jobid": job["jobid"] if job else None,
-                    "details": task_def.to_dict() if task_def else {},
+                    "details": details,
                 }
                 tasks_status.append(task_info)
 
             result.append({"cycle": cycle_str, "tasks": tasks_status})
         return result
+
+    def _resolve_task_details(self, details: dict[str, Any], cycle: str | datetime) -> dict[str, Any]:
+        """
+        Recursively resolve <cyclestr> tags in task details for a specific cycle.
+
+        Parameters
+        ----------
+        details : dict[str, Any]
+            The task details dictionary.
+        cycle : str | datetime
+            The cycle string or datetime object for resolution.
+
+        Returns
+        -------
+        dict[str, Any]
+            The details dictionary with resolved strings.
+        """
+        resolved = {}
+        for key, value in details.items():
+            if isinstance(value, str):
+                if "<cyclestr" in value:
+                    resolved[key] = self.resolve_cyclestr(value, cycle)
+                else:
+                    resolved[key] = value
+            elif isinstance(value, dict):
+                resolved[key] = self._resolve_task_details(value, cycle)
+            elif isinstance(value, list):
+                resolved[key] = [
+                    self._resolve_task_details(item, cycle)
+                    if isinstance(item, dict)
+                    else (self.resolve_cyclestr(item, cycle) if isinstance(item, str) else item)
+                    for item in value
+                ]
+            else:
+                resolved[key] = value
+        return resolved
 
     def _parse_cycle(self, cycle_val: int | str | None) -> str:
         """

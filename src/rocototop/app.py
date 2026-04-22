@@ -673,10 +673,11 @@ class RocotoApp(App[None]):
         panel = self.query_one("#details_panel", Static)
         details = task.get("details", {})
 
-        command = self.parser.resolve_cyclestr(details.get("command", ""), cycle)
-        stdout = self.parser.resolve_cyclestr(details.get("stdout", ""), cycle)
-        stderr = self.parser.resolve_cyclestr(details.get("stderr", ""), cycle)
-        join = self.parser.resolve_cyclestr(details.get("join", ""), cycle)
+        # Details are already resolved by the background parser worker
+        command = details.get("command", "")
+        stdout = details.get("stdout", "")
+        stderr = details.get("stderr", "")
+        join = details.get("join", "")
 
         exit_str = task["exit"] if task["exit"] is not None else "-"
         content = f"[bold]Task:[/bold] {task['task']}  [bold]Cycle:[/bold] {cycle}\n"
@@ -695,8 +696,7 @@ class RocotoApp(App[None]):
             content += f"[bold]Memory:[/bold] {memory}\n"
 
         if datatroot := details.get("envars", {}).get("DATAROOT"):
-            res_dr = self.parser.resolve_cyclestr(datatroot, cycle)
-            content += f"[bold]DATAROOT:[/bold] {res_dr}\n"
+            content += f"[bold]DATAROOT:[/bold] {datatroot}\n"
 
         if join:
             content += f"[bold]Log (Joined):[/bold] {join}\n"
@@ -709,8 +709,7 @@ class RocotoApp(App[None]):
         if envars := details.get("envars"):
             content += "[bold]Environment Variables:[/bold]\n"
             for k, v in envars.items():
-                res_v = self.parser.resolve_cyclestr(v, cycle)
-                content += f"  - {k}={res_v}\n"
+                content += f"  - {k}={v}\n"
 
         if deps := details.get("dependencies"):
             content += "[bold]Dependencies:[/bold]\n"
@@ -1214,7 +1213,8 @@ class RocotoApp(App[None]):
         self.query_one("#search_status", Static).update("")
 
         details = self.last_selected_task.get("details", {})
-        log_file = self.parser.resolve_cyclestr(details.get("join") or details.get("stdout") or "", self.last_selected_cycle)
+        # Log file path is already resolved in details
+        log_file = details.get("join") or details.get("stdout") or ""
 
         if not log_file:
             log_panel.write("No log file defined for this task.")
