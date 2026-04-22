@@ -216,8 +216,8 @@ class RocotoParser:
         List of task names in the order they appear in the XML.
     metatask_list : dict[str, list[str]]
         Dictionary mapping metatask names to their child task names.
-    cycledef_group_cycles : dict[str, list[str]]
-        Dictionary mapping cycledef groups to their lists of cycles.
+    cycledef_group_cycles : dict[str, set[str]]
+        Dictionary mapping cycledef groups to their sets of cycles.
     _last_parsed_mtime : float | None
         The modification time of the XML file when it was last parsed.
     """
@@ -239,7 +239,7 @@ class RocotoParser:
         self.tasks_dict: dict[str, RocotoTask] = {}
         self.tasks_ordered: list[str] = []
         self.metatask_list: dict[str, list[str]] = defaultdict(list)
-        self.cycledef_group_cycles: dict[str, list[str]] = defaultdict(list)
+        self.cycledef_group_cycles: dict[str, set[str]] = defaultdict(set)
         self._last_parsed_mtime: float | None = None
 
     def parse_workflow(self) -> None:
@@ -382,7 +382,7 @@ class RocotoParser:
         self.tasks_dict = {}
         self.tasks_ordered = []
         self.metatask_list = defaultdict(list)
-        self.cycledef_group_cycles = defaultdict(list)
+        self.cycledef_group_cycles = defaultdict(set)
 
         for child in root:
             if child.tag == "cycledef":
@@ -425,7 +425,7 @@ class RocotoParser:
                     inc = timedelta(hours=int(h), minutes=int(m), seconds=int(s))
                     curr = start
                     while curr <= end:
-                        self.cycledef_group_cycles[group].append(curr.strftime(CYCLE_FORMAT))
+                        self.cycledef_group_cycles[group].add(curr.strftime(CYCLE_FORMAT))
                         curr += inc
             except ValueError as e:
                 logger.warning("Failed to parse cycledef text '%s': %s", text, e)
@@ -783,7 +783,7 @@ class RocotoParser:
                     else:
                         groups = [g.strip() for g in task_def.cycledefs.split(",")]
                         for group in groups:
-                            if cycle_str in self.cycledef_group_cycles.get(group, []):
+                            if cycle_str in self.cycledef_group_cycles.get(group, set()):
                                 xml_tasks_for_cycle.add(tname)
                                 break
 
