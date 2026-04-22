@@ -1,6 +1,7 @@
-import pytest
 import sqlite3
 import time
+
+import pytest
 
 from rocototop.parser import RocotoParser
 
