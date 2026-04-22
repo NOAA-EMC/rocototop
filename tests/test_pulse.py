@@ -1,5 +1,5 @@
 import sqlite3
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -38,26 +38,30 @@ async def test_pulse_runs_rocotorun(mock_rocoto_files):
     wf, db = mock_rocoto_files
     app = RocotoApp(workflow_file=wf, database_file=db)
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"", b"")
+        mock_process.returncode = 0
+        mock_exec.return_value = mock_process
+
         async with app.run_test() as pilot:
             await pilot.pause(0.5)
 
             # Reset mock after initial refresh on mount
-            mock_run.reset_mock()
+            mock_exec.reset_mock()
 
             # Press 'R' for run (rocotorun)
             await pilot.press("R")
             await pilot.pause(0.5)
 
             # Verify rocotorun was called
-            mock_run.assert_called_once()
-            args, kwargs = mock_run.call_args
-            assert args[0][0] == "rocotorun"
-            assert "-w" in args[0]
-            assert wf in args[0]
-            assert "-d" in args[0]
-            assert db in args[0]
+            mock_exec.assert_called_once()
+            args, kwargs = mock_exec.call_args
+            assert args[0] == "rocotorun"
+            assert "-w" in args
+            assert wf in args
+            assert "-d" in args
+            assert db in args
 
 
 @pytest.mark.asyncio
@@ -65,18 +69,22 @@ async def test_refresh_runs_rocotorun(mock_rocoto_files):
     wf, db = mock_rocoto_files
     app = RocotoApp(workflow_file=wf, database_file=db)
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"", b"")
+        mock_process.returncode = 0
+        mock_exec.return_value = mock_process
+
         async with app.run_test() as pilot:
             await pilot.pause(0.5)
 
             # Reset mock
-            mock_run.reset_mock()
+            mock_exec.reset_mock()
 
             # Press 'R' for run (rocotorun) — matches rocoto_viewer's <R> key
             await pilot.press("R")
             await pilot.pause(0.5)
 
             # Verify rocotorun was called
-            mock_run.assert_called_once()
-            assert mock_run.call_args[0][0][0] == "rocotorun"
+            mock_exec.assert_called_once()
+            assert mock_exec.call_args[0][0] == "rocotorun"
