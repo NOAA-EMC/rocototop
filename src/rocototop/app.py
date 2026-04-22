@@ -6,10 +6,10 @@ Textual application for viewing Rocoto workflows.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
-import subprocess
 import time
 from typing import Any
 
@@ -17,6 +17,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
+from textual.reactive import reactive
 from textual.widgets import (
     DataTable,
     Footer,
@@ -184,6 +185,10 @@ class RocotoApp(App[None]):
     }}
     """
 
+    all_data: reactive[list[CycleStatus]] = reactive([])
+    last_selected_task: reactive[dict[str, Any] | None] = reactive(None)
+    last_selected_cycle: reactive[str | None] = reactive(None)
+
     def __init__(
         self,
         workflow_file: str,
@@ -194,9 +199,6 @@ class RocotoApp(App[None]):
         super().__init__(**kwargs)
         self.parser: RocotoParser = RocotoParser(workflow_file, database_file)
         self.refresh_interval = refresh_interval
-        self.all_data: list[CycleStatus] = []
-        self.last_selected_task: dict[str, Any] | None = None
-        self.last_selected_cycle: str | None = None
         self.log_follow: bool = True
         self.current_log_file: str | None = None
         self._log_lines: list[str] = []
@@ -242,6 +244,7 @@ class RocotoApp(App[None]):
         None
         """
         self.set_interval(self.refresh_interval, self._auto_refresh)  # Auto-refresh
+        self._update_status_bar()
         self.action_reload()
 
     def _auto_refresh(self) -> None:
@@ -268,13 +271,13 @@ class RocotoApp(App[None]):
         """
         self._background_refresh(run_pulse=True)
 
-    @work(thread=True, exclusive=True)
-    def _background_refresh(self, run_pulse: bool = False) -> None:
+    @work(exclusive=True)
+    async def _background_refresh(self, run_pulse: bool = False) -> None:
         """
         Perform background refresh of data.
 
         This worker parses the workflow XML and queries the database
-        in a separate thread to avoid blocking the UI.
+        using asyncio.to_thread to avoid blocking the UI.
 
         Parameters
         ----------
@@ -287,23 +290,27 @@ class RocotoApp(App[None]):
         """
         try:
             if run_pulse:
-                self.call_from_thread(self.notify, "Starting pulse (rocotorun)...")
-                self._run_pulse_sync()
-                self.call_from_thread(self.notify, "Pulse (rocotorun) completed")
+                self.notify("Starting pulse (rocotorun)...")
+                await self._run_pulse()
+                self.notify("Pulse (rocotorun) completed")
 
-            self.parser.parse_workflow()
-            self.all_data = self.parser.get_status()
+            # Run blocking I/O in a thread
+            await asyncio.to_thread(self.parser.parse_workflow)
+            data = await asyncio.to_thread(self.parser.get_status)
+            self.all_data = list(data)
+
             if not run_pulse:
-                self.call_from_thread(self.notify, "Data refresh completed")
-            self.call_from_thread(self._update_ui)
+                self.notify("Data refresh completed")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Error refreshing data: {e}", severity="error")
+            self.notify(f"Error refreshing data: {e}", severity="error")
 
-    def _run_pulse_sync(self) -> None:
+    async def _run_pulse(self) -> None:
         """
-        Run rocotorun synchronously.
+        Run rocotorun asynchronously.
 
-        Should be called from a background worker.
+        Returns
+        -------
+        None
         """
         cmd = [
             "rocotorun",
@@ -313,10 +320,14 @@ class RocotoApp(App[None]):
             self.parser.database_file,
         ]
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=False)
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await process.communicate()
         except FileNotFoundError:
-            self.call_from_thread(
-                self.notify,
+            self.notify(
                 "rocotorun not found. Is Rocoto installed?",
                 severity="warning",
             )
@@ -337,6 +348,50 @@ class RocotoApp(App[None]):
         None
         """
         self._update_ui()
+        self._update_status_bar()
+
+    def watch_all_data(self, data: list[CycleStatus]) -> None:
+        """
+        Watch for changes in all_data and update the UI.
+
+        Parameters
+        ----------
+        data : list[CycleStatus]
+            The new data.
+
+        Returns
+        -------
+        None
+        """
+        self._update_ui()
+        self._update_status_bar()
+
+    def watch_last_selected_task(self, task: dict[str, Any] | None) -> None:
+        """
+        Watch for changes in the last selected task and update details.
+
+        Parameters
+        ----------
+        task : dict[str, Any] | None
+            The newly selected task data.
+
+        Returns
+        -------
+        None
+        """
+        if task and self.last_selected_cycle:
+            self._display_details(task, self.last_selected_cycle)
+        self._update_status_bar()
+
+    def watch_last_selected_cycle(self) -> None:
+        """
+        Watch for changes in the last selected cycle.
+
+        Returns
+        -------
+        None
+        """
+        self._update_status_bar()
 
     def _update_status_bar(self) -> None:
         """
@@ -346,6 +401,11 @@ class RocotoApp(App[None]):
         -------
         None
         """
+        try:
+            status_bar = self.query_one("#status_bar", Static)
+        except Exception:
+            return
+
         summary = self.parser.get_summary(self.all_data)
         parts = []
 
@@ -373,7 +433,7 @@ class RocotoApp(App[None]):
             if self.last_selected_task:
                 path += f" > {self.last_selected_task['task']}"
 
-        self.query_one("#status_bar", Static).update(f"{path} | {summary_str}")
+        status_bar.update(f"{path} | {summary_str}")
 
     def _update_ui(self) -> None:
         """
@@ -385,10 +445,14 @@ class RocotoApp(App[None]):
         -------
         None
         """
-        with self.batch_update():
-            filter_text = self.query_one("#filter_input", Input).value.lower()
-
+        try:
             tree = self.query_one("#cycle_tree", Tree)
+            filter_input = self.query_one("#filter_input", Input)
+        except Exception:
+            return
+
+        with self.batch_update():
+            filter_text = filter_input.value.lower()
             # To preserve expansion state, we'll track existing nodes
             existing_cycles = {str(node.label): node for node in tree.root.children}
             seen_cycles = set()
@@ -445,9 +509,6 @@ class RocotoApp(App[None]):
                 if cstr not in seen_cycles:
                     cnode.remove()
 
-            # Update status bar summary
-            self._update_status_bar()
-
             # Refresh selected task status if one is selected
             if self.last_selected_task and self.last_selected_cycle:
                 # Find the updated task data
@@ -455,8 +516,8 @@ class RocotoApp(App[None]):
                     if cycle_info["cycle"] == self.last_selected_cycle:
                         for task in cycle_info["tasks"]:
                             if task["task"] == self.last_selected_task["task"]:
+                                # Update reactive with new data, triggers watch_last_selected_task
                                 self.last_selected_task = task
-                                self._display_details(task, self.last_selected_cycle)
                                 break
                         break
 
@@ -892,8 +953,8 @@ class RocotoApp(App[None]):
 
         self._rewind_cycle_tasks(self.last_selected_cycle, tasks)
 
-    @work(thread=True)
-    def _rewind_cycle_tasks(self, cycle: str, tasks: list[str]) -> None:
+    @work
+    async def _rewind_cycle_tasks(self, cycle: str, tasks: list[str]) -> None:
         """
         Run rocotorewind for each task in a cycle in a background thread.
 
@@ -904,11 +965,12 @@ class RocotoApp(App[None]):
         tasks : list[str]
             List of task names to rewind.
         """
-        self.call_from_thread(self.notify, f"Rewinding {len(tasks)} tasks in cycle {cycle}...")
+        self.notify(f"Rewinding {len(tasks)} tasks in cycle {cycle}...")
         succeeded = 0
         failed = 0
 
-        for task_name in tasks:
+        # We can run these in parallel using asyncio.gather for better performance
+        async def run_rewind(task_name: str) -> bool:
             cmd = [
                 "rocotorewind",
                 "-w",
@@ -921,32 +983,36 @@ class RocotoApp(App[None]):
                 task_name,
             ]
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-                if result.returncode == 0:
-                    succeeded += 1
-                else:
-                    failed += 1
-                    logger.warning("Failed to rewind %s: %s", task_name, result.stderr.strip())
-            except FileNotFoundError:
-                self.call_from_thread(
-                    self.notify,
-                    "rocotorewind not found. Is Rocoto installed?",
-                    severity="error",
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
-                return
+                _, stderr = await process.communicate()
+                if process.returncode == 0:
+                    return True
+                else:
+                    logger.warning("Failed to rewind %s: %s", task_name, stderr.decode().strip())
+                    return False
+            except FileNotFoundError:
+                return False
             except Exception as e:
-                failed += 1
                 logger.error("Error rewinding %s: %s", task_name, e)
+                return False
+
+        results = await asyncio.gather(*(run_rewind(t) for t in tasks))
+        succeeded = sum(1 for r in results if r)
+        failed = len(tasks) - succeeded
 
         msg = f"Cycle rewind complete: {succeeded} succeeded"
         if failed:
             msg += f", {failed} failed"
-            self.call_from_thread(self.notify, msg, severity="warning")
+            self.notify(msg, severity="warning")
         else:
-            self.call_from_thread(self.notify, msg)
+            self.notify(msg)
 
-    @work(thread=True)
-    def _run_rocoto_command(self, command: str) -> None:
+    @work
+    async def _run_rocoto_command(self, command: str) -> None:
         """
         Run a Rocoto CLI command for the selected task and cycle.
 
@@ -960,7 +1026,7 @@ class RocotoApp(App[None]):
         None
         """
         if not self.last_selected_task or not self.last_selected_cycle:
-            self.call_from_thread(self.notify, "No task selected", severity="warning")
+            self.notify("No task selected", severity="warning")
             return
 
         task_name = self.last_selected_task["task"]
@@ -979,16 +1045,21 @@ class RocotoApp(App[None]):
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                self.call_from_thread(self.notify, f"Successfully executed {command} for {task_name}")
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode == 0:
+                self.notify(f"Successfully executed {command} for {task_name}")
             else:
-                error_msg = result.stderr.strip() or f"Return code {result.returncode}"
-                self.call_from_thread(self.notify, f"Failed to execute {command}: {error_msg}", severity="error")
+                error_msg = stderr.decode().strip() or f"Return code {process.returncode}"
+                self.notify(f"Failed to execute {command}: {error_msg}", severity="error")
         except FileNotFoundError:
-            self.call_from_thread(self.notify, f"Command not found: {command}. Is Rocoto installed?", severity="error")
+            self.notify(f"Command not found: {command}. Is Rocoto installed?", severity="error")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Error executing {command}: {e}", severity="error")
+            self.notify(f"Error executing {command}: {e}", severity="error")
 
     def action_toggle_log(self) -> None:
         """
