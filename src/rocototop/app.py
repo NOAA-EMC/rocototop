@@ -186,6 +186,7 @@ class RocotoApp(App[None]):
     """
 
     all_data: reactive[list[CycleStatus]] = reactive([])
+    workflow_summary: reactive[dict[str, int]] = reactive({})
     last_selected_task: reactive[dict[str, Any] | None] = reactive(None)
     last_selected_cycle: reactive[str | None] = reactive(None)
 
@@ -205,6 +206,7 @@ class RocotoApp(App[None]):
         self._search_query: str = ""
         self._search_matches: list[int] = []
         self._search_index: int = -1
+        self._expanded_cycles: set[str] = set()
 
     def compose(self) -> ComposeResult:
         """
@@ -297,7 +299,11 @@ class RocotoApp(App[None]):
             # Parser methods are now async
             await self.parser.parse_workflow()
             data = await self.parser.get_status()
-            self.all_data = list(data)
+            summary = self.parser.get_summary(data)
+
+            with self.batch_update():
+                self.all_data = list(data)
+                self.workflow_summary = summary
 
             if not run_pulse:
                 self.notify("Data refresh completed")
@@ -348,6 +354,21 @@ class RocotoApp(App[None]):
         None
         """
         self._update_ui()
+        self._update_status_bar()
+
+    def watch_workflow_summary(self, summary: dict[str, int]) -> None:
+        """
+        Watch for changes in workflow_summary and update the status bar.
+
+        Parameters
+        ----------
+        summary : dict[str, int]
+            The new summary.
+
+        Returns
+        -------
+        None
+        """
         self._update_status_bar()
 
     def watch_all_data(self, data: list[CycleStatus]) -> None:
@@ -406,7 +427,7 @@ class RocotoApp(App[None]):
         except Exception:
             return
 
-        summary = self.parser.get_summary(self.all_data)
+        summary = self.workflow_summary
         parts = []
 
         # Define priority states and their short names/colors
@@ -476,33 +497,41 @@ class RocotoApp(App[None]):
 
                 # If cycle node doesn't exist, create it.
                 if cycle_node is None:
-                    cycle_node = tree.root.add(cycle_str, expand=False)
+                    is_expanded = cycle_str in self._expanded_cycles
+                    cycle_node = tree.root.add(cycle_str, expand=is_expanded)
 
-                # Track existing task nodes in this cycle
-                existing_tasks = {node.data: node for node in cycle_node.children if node.data}
-                seen_tasks = set()
+                # Lazy Loading: Only populate task nodes if the cycle is expanded
+                # or if we are filtering (to show matches in collapsed cycles).
+                if cycle_node.is_expanded or filter_text:
+                    # Track existing task nodes in this cycle
+                    existing_tasks = {node.data: node for node in cycle_node.children if node.data}
+                    seen_tasks = set()
 
-                for task in visible_tasks:
-                    task_name = task["task"]
-                    seen_tasks.add(task_name)
-                    state = task["state"]
-                    icon = self._get_state_icon(state)
-                    state_color = self._get_state_color(state)
+                    for task in visible_tasks:
+                        task_name = task["task"]
+                        seen_tasks.add(task_name)
+                        state = task["state"]
+                        icon = self._get_state_icon(state)
+                        state_color = self._get_state_color(state)
 
-                    leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
+                        leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
 
-                    task_node = existing_tasks.get(task_name)
-                    if task_node:
-                        if str(task_node.label) != leaf_label:
-                            task_node.set_label(leaf_label)
-                    else:
-                        task_node = cycle_node.add_leaf(leaf_label)
-                        task_node.data = task_name
+                        task_node = existing_tasks.get(task_name)
+                        if task_node:
+                            if str(task_node.label) != leaf_label:
+                                task_node.set_label(leaf_label)
+                        else:
+                            task_node = cycle_node.add_leaf(leaf_label)
+                            task_node.data = task_name
 
-                # Remove tasks that no longer exist
-                for tname, tnode in existing_tasks.items():
-                    if tname not in seen_tasks:
-                        tnode.remove()
+                    # Remove tasks that no longer exist or shouldn't be there
+                    for tname, tnode in existing_tasks.items():
+                        if tname not in seen_tasks:
+                            tnode.remove()
+                else:
+                    # If collapsed and not filtering, remove all child nodes to save memory/DOM
+                    if cycle_node.children:
+                        cycle_node.remove_children()
 
             # Remove cycles that no longer exist
             for cstr, cnode in existing_cycles.items():
@@ -516,8 +545,15 @@ class RocotoApp(App[None]):
                     if cycle_info["cycle"] == self.last_selected_cycle:
                         for task in cycle_info["tasks"]:
                             if task["task"] == self.last_selected_task["task"]:
+                                # Resolve details for the selected task specifically
+                                # to prevent regression to unresolved strings.
+                                resolved_task = task.copy()
+                                if "details" in task:
+                                    resolved_task["details"] = self.parser.resolve_task_details(
+                                        task["details"], self.last_selected_cycle
+                                    )
                                 # Update reactive with new data, triggers watch_last_selected_task
-                                self.last_selected_task = task
+                                self.last_selected_task = resolved_task
                                 break
                         break
 
@@ -577,6 +613,34 @@ class RocotoApp(App[None]):
             return "white"
         return "white"
 
+    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
+        """
+        Handle tree node expansion to lazy-load children.
+
+        Parameters
+        ----------
+        event : Tree.NodeExpanded
+            The tree node expansion event.
+        """
+        node = event.node
+        if node.allow_expand:
+            self._expanded_cycles.add(str(node.label))
+        self._update_ui()
+
+    def on_tree_node_collapsed(self, event: Tree.NodeCollapsed) -> None:
+        """
+        Handle tree node collapse to free up resources.
+
+        Parameters
+        ----------
+        event : Tree.NodeCollapsed
+            The tree node collapse event.
+        """
+        node = event.node
+        if node.allow_expand:
+            self._expanded_cycles.discard(str(node.label))
+        self._update_ui()
+
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """
         Handle tree node selection to expand or show details.
@@ -609,10 +673,15 @@ class RocotoApp(App[None]):
                 if cycle_info["cycle"] == cycle_str:
                     for task in cycle_info["tasks"]:
                         if task["task"] == task_name:
-                            self.last_selected_task = task
+                            # On-demand resolution of task details
+                            resolved_task = task.copy()
+                            if "details" in task:
+                                resolved_task["details"] = self.parser.resolve_task_details(task["details"], cycle_str)
+
+                            self.last_selected_task = resolved_task
                             self.last_selected_cycle = cycle_str
                             self._update_status_bar()
-                            self._display_details(task, cycle_str)
+                            self._display_details(resolved_task, cycle_str)
                             self._update_log()
                             break
                     break
@@ -641,7 +710,7 @@ class RocotoApp(App[None]):
         Parameters
         ----------
         task : dict[str, Any]
-            The task data.
+            The task data (expected to have resolved details).
         cycle : str
             The cycle string.
 

@@ -7,6 +7,7 @@ Parser for Rocoto workflow XML files and SQLite databases.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import re
@@ -122,6 +123,12 @@ CYCLE_FORMAT = "%Y%m%d%H%M"
 ENTITY_RECURSION_LIMIT = 3
 CYCLE_TIMESTAMP_THRESHOLD = 200000000000
 
+# Pre-compiled Regex Patterns
+CYCLYSTR_RE = re.compile(r"<cyclestr(?:\s+[^>]*?)?>(.*?)</cyclestr>", re.DOTALL)
+OFFSET_RE = re.compile(r'offset=["\'](.*?)["\']')
+DOCTYPE_SUBSET_RE = re.compile(r"<!DOCTYPE\s+\w+\s*\[.*?\]\s*>", re.DOTALL)
+DOCTYPE_SIMPLE_RE = re.compile(r"<!DOCTYPE[^>]*>")
+
 
 class RocotoTask:
     """
@@ -166,6 +173,7 @@ class RocotoTask:
         """
         self.name = name
         self.cycledefs = cycledefs
+        self.cycledef_groups = {g.strip() for g in cycledefs.split(",")}
         self.command: str = ""
         self.account: str = ""
         self.queue: str = ""
@@ -414,8 +422,8 @@ class RocotoParser:
             # Strip DOCTYPE declarations before passing to ElementTree, which
             # cannot handle DTD internal subsets or entity references.
             # First strip DOCTYPEs with internal subsets, then simple ones.
-            content = re.sub(r"<!DOCTYPE\s+\w+\s*\[.*?\]\s*>", "", content, flags=re.DOTALL)
-            content = re.sub(r"<!DOCTYPE[^>]*>", "", content)
+            content = DOCTYPE_SUBSET_RE.sub("", content)
+            content = DOCTYPE_SIMPLE_RE.sub("", content)
 
             root = ET.fromstring(content.strip())
         except ET.ParseError as e:
@@ -699,21 +707,45 @@ class RocotoParser:
             except ValueError:
                 return text
 
+        # Cache for strftime results within this call
+        strftime_cache: dict[tuple[datetime, str], str] = {}
+
+        def get_strftime(current_dt: datetime, fmt: str) -> str:
+            key = (current_dt, fmt)
+            if key not in strftime_cache:
+                strftime_cache[key] = current_dt.strftime(fmt)
+            return strftime_cache[key]
+
+        flags = {
+            "@Y": "%Y",
+            "@y": "%y",
+            "@m": "%m",
+            "@d": "%d",
+            "@H": "%H",
+            "@I": "%I",
+            "@M": "%M",
+            "@S": "%S",
+            "@p": "%p",
+            "@j": "%j",
+            "@A": "%A",
+            "@a": "%a",
+            "@B": "%B",
+            "@b": "%b",
+        }
+
         def replace_cyclestr(match: re.Match) -> str:
             full_tag = match.group(0)
             content = match.group(1)
 
-            offset_attr = re.search(r'offset=["\'](.*?)["\']', full_tag)
+            offset_attr = OFFSET_RE.search(full_tag)
             current_dt = dt
             if offset_attr:
                 offset_str = offset_attr.group(1)
-                negative = False
-                if offset_str.startswith("-"):
-                    negative = True
+                negative = offset_str.startswith("-")
+                if negative:
                     offset_str = offset_str[1:]
 
                 parts = offset_str.split(":")
-                delta = timedelta()
                 try:
                     if len(parts) == 4:
                         delta = timedelta(
@@ -732,8 +764,10 @@ class RocotoParser:
                         delta = timedelta(minutes=int(parts[0]), seconds=int(parts[1]))
                     elif len(parts) == 1:
                         delta = timedelta(seconds=int(parts[0]))
+                    else:
+                        delta = timedelta()
                 except ValueError:
-                    pass
+                    delta = timedelta()
 
                 if negative:
                     current_dt -= delta
@@ -741,33 +775,14 @@ class RocotoParser:
                     current_dt += delta
 
             res = content
-            flags = {
-                "@Y": "%Y",
-                "@y": "%y",
-                "@m": "%m",
-                "@d": "%d",
-                "@H": "%H",
-                "@I": "%I",
-                "@M": "%M",
-                "@S": "%S",
-                "@p": "%p",
-                "@j": "%j",
-                "@A": "%A",
-                "@a": "%a",
-                "@B": "%B",
-                "@b": "%b",
-            }
             for flag, fmt in flags.items():
-                res = res.replace(flag, current_dt.strftime(fmt))
-            res = res.replace("@s", str(int(current_dt.timestamp())))
+                if flag in res:
+                    res = res.replace(flag, get_strftime(current_dt, fmt))
+            if "@s" in res:
+                res = res.replace("@s", str(int(current_dt.timestamp())))
             return res
 
-        return re.sub(
-            r"<cyclestr(?:\s+[^>]*?)?>(.*?)</cyclestr>",
-            replace_cyclestr,
-            text,
-            flags=re.DOTALL,
-        )
+        return CYCLYSTR_RE.sub(replace_cyclestr, text)
 
     def get_summary(self, status_data: list[CycleStatus]) -> dict[str, int]:
         """
@@ -823,10 +838,6 @@ class RocotoParser:
         result: list[CycleStatus] = []
         for cycle_raw in cycles_raw:
             cycle_str = self._parse_cycle(cycle_raw)
-            try:
-                cycle_dt = datetime.strptime(cycle_str, CYCLE_FORMAT)
-            except ValueError:
-                cycle_dt = datetime.now(tz=UTC)  # Fallback
 
             tasks_status = []
 
@@ -838,8 +849,7 @@ class RocotoParser:
                     if task_def.cycledefs == DEFAULT_CYCLE:
                         xml_tasks_for_cycle.add(tname)
                     else:
-                        groups = [g.strip() for g in task_def.cycledefs.split(",")]
-                        for group in groups:
+                        for group in task_def.cycledef_groups:
                             if cycle_str in self.cycledef_group_cycles.get(group, set()):
                                 xml_tasks_for_cycle.add(tname)
                                 break
@@ -865,10 +875,9 @@ class RocotoParser:
                 task_def = self.tasks_dict.get(tname)
                 job = jobs_data.get(cycle_raw, {}).get(tname)
 
-                # Resolve cycle-specific strings in the background worker
+                # Deferred resolution: task details are returned unresolved.
+                # Resolution is performed on-demand when the task is selected in the UI.
                 details = task_def.to_dict() if task_def else {}
-                if details:
-                    details = self._resolve_task_details(details, cycle_dt)
 
                 task_info: TaskStatus = {
                     "task": tname,
@@ -884,7 +893,7 @@ class RocotoParser:
             result.append({"cycle": cycle_str, "tasks": tasks_status})
         return result
 
-    def _resolve_task_details(self, details: dict[str, Any], cycle: str | datetime) -> dict[str, Any]:
+    def resolve_task_details(self, details: dict[str, Any], cycle: str | datetime) -> dict[str, Any]:
         """
         Recursively resolve <cyclestr> tags in task details for a specific cycle.
 
@@ -908,10 +917,10 @@ class RocotoParser:
                 else:
                     resolved[key] = value
             elif isinstance(value, dict):
-                resolved[key] = self._resolve_task_details(value, cycle)
+                resolved[key] = self.resolve_task_details(value, cycle)
             elif isinstance(value, list):
                 resolved[key] = [
-                    self._resolve_task_details(item, cycle)
+                    self.resolve_task_details(item, cycle)
                     if isinstance(item, dict)
                     else (self.resolve_cyclestr(item, cycle) if isinstance(item, str) else item)
                     for item in value
@@ -920,7 +929,9 @@ class RocotoParser:
                 resolved[key] = value
         return resolved
 
-    def _parse_cycle(self, cycle_val: int | str | None) -> str:
+    @staticmethod
+    @functools.lru_cache(maxsize=128)
+    def _parse_cycle(cycle_val: int | str | None) -> str:
         """
         Parse a cycle value (timestamp or string) into YYYYMMDDHHMM format.
 
