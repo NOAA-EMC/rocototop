@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!DOCTYPE workflow [
+  <!ENTITY HOME ".">
+]>
+<workflow name="TutorialWorkflow">
+  <cycledef group="standard">202310270000 202310271200 12:00:00</cycledef>
+
+  <task name="ingest" cycledefs="standard">
+    <command>&HOME;/scripts/ingest.sh</command>
+    <stdout>&HOME;/logs/ingest_<cyclestr>@Y@m@d@H</cyclestr>.log</stdout>
+  </task>
+
+  <metatask name="models" cycledefs="standard">
+    <var name="TYPE">A B</var>
+    <task name="run_model_#TYPE#">
+      <command>&HOME;/bin/model --type #TYPE#</command>
+      <stdout>&HOME;/logs/model_#TYPE#_<cyclestr>@Y@m@d@H</cyclestr>.log</stdout>
+      <dependency>
+        <taskdep task="ingest"/>
+      </dependency>
+    </task>
+  </metatask>
+
+  <task name="post_process" cycledefs="standard">
+    <command>&HOME;/scripts/post.sh</command>
+    <stdout>&HOME;/logs/post_<cyclestr>@Y@m@d@H</cyclestr>.log</stdout>
+    <dependency>
+      <and>
+        <taskdep task="run_model_A"/>
+        <taskdep task="run_model_B"/>
+      </and>
+    </dependency>
+  </task>
+
+  <task name="archive" cycledefs="standard">
+    <command>tar cvf archive.tar ...</command>
+    <stdout>&HOME;/logs/archive_<cyclestr>@Y@m@d@H</cyclestr>.log</stdout>
+    <dependency>
+      <taskdep task="post_process"/>
+    </dependency>
+  </task>
+
+  <task name="verify" cycledefs="standard">
+    <command>&HOME;/scripts/verify.sh</command>
+    <stdout>&HOME;/logs/verify_<cyclestr>@Y@m@d@H</cyclestr>.log</stdout>
+    <dependency>
+      <and>
+        <taskdep task="archive"/>
+        <!-- Example of a cycle offset dependency: depends on archive from 12h ago -->
+        <taskdep task="archive">
+          <cycleoffset>-12:00:00</cycleoffset>
+        </taskdep>
+      </and>
+    </dependency>
+  </task>
+</workflow>
