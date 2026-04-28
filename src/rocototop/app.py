@@ -10,14 +10,18 @@ import asyncio
 import logging
 import os
 import re
+from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 import aiofiles
+from rich.table import Table
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
     Footer,
@@ -30,9 +34,60 @@ from textual.widgets import (
     Tree,
 )
 
-from rocototop.parser import CycleStatus, RocotoParser
+from rocototop.parser import CycleStatus, RocotoParser, TaskStatus
 
 logger = logging.getLogger(__name__)
+
+
+class HelpScreen(ModalScreen):
+    """A modal screen that displays help for the application."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("q", "dismiss", "Close"),
+        Binding("h", "dismiss", "Close"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static("RocotoTop Help", id="help_title"),
+            Static(id="help_content"),
+            Static("Press ESC, q, or h to close", id="help_footer"),
+            id="help_dialog",
+        )
+
+    def on_mount(self) -> None:
+        table = Table(show_header=True, header_style="bold magenta", expand=True)
+        table.add_column("Key", style="dim", width=10)
+        table.add_column("Action")
+
+        # Define key bindings to show in help
+        bindings = [
+            ("c", "Check Task (rocotocheck)"),
+            ("b", "Boot Task (rocotoboot)"),
+            ("r", "Rewind Task (rocotorewind)"),
+            ("R", "Run Workflow (rocotorun)"),
+            ("C", "Mark Task Complete"),
+            ("W", "Rewind Entire Cycle"),
+            ("right", "Next Cycle"),
+            ("left", "Previous Cycle"),
+            ("x", "Expand/Collapse"),
+            ("l", "Reload Status Data"),
+            ("F", "Find Last Running Cycle"),
+            ("g", "Jump to Top of Tree"),
+            ("G", "Jump to Bottom of Tree"),
+            ("t", "Toggle Details/Log Tabs"),
+            ("f", "Toggle Log Follow Mode"),
+            ("/", "Search Log (vi-style)"),
+            ("n/N", "Next/Prev Search Match"),
+            ("h", "Show this Help"),
+            ("q/Q", "Quit"),
+        ]
+
+        for key, action in bindings:
+            table.add_row(key, action)
+
+        self.query_one("#help_content", Static).update(table)
 
 
 class RocotoApp(App[None]):
@@ -107,6 +162,8 @@ class RocotoApp(App[None]):
         Binding("n", "search_next", "Next Match", show=False),
         Binding("N", "search_prev", "Prev Match", show=False),
         Binding("escape", "close_log_search", "Close Search", show=False, priority=True),
+        Binding("g", "top", "Top", show=False),
+        Binding("G", "bottom", "Bottom", show=False),
     ]
 
     CSS = f"""
@@ -179,6 +236,33 @@ class RocotoApp(App[None]):
         padding-left: 1;
     }}
 
+    HelpScreen {{
+        align: center middle;
+    }}
+
+    #help_dialog {{
+        padding: 1 2;
+        background: $surface;
+        border: thick $primary;
+        width: 60;
+        height: auto;
+        max-height: 80%;
+    }}
+
+    #help_title {{
+        content-align: center middle;
+        text-style: bold;
+        background: $primary;
+        color: $text;
+        margin-bottom: 1;
+    }}
+
+    #help_footer {{
+        content-align: center middle;
+        text-style: italic;
+        margin-top: 1;
+    }}
+
     .bold {{
         text-style: bold;
         color: $accent;
@@ -187,6 +271,7 @@ class RocotoApp(App[None]):
 
     all_data: reactive[list[CycleStatus]] = reactive([])
     workflow_summary: reactive[dict[str, int]] = reactive({})
+    last_refresh_time: reactive[datetime | None] = reactive(None)
     last_selected_task: reactive[dict[str, Any] | None] = reactive(None)
     last_selected_cycle: reactive[str | None] = reactive(None)
 
@@ -304,6 +389,7 @@ class RocotoApp(App[None]):
             with self.batch_update():
                 self.all_data = list(data)
                 self.workflow_summary = summary
+                self.last_refresh_time = datetime.now()
 
             if not run_pulse:
                 self.notify("Data refresh completed")
@@ -402,7 +488,52 @@ class RocotoApp(App[None]):
         """
         if task and self.last_selected_cycle:
             self._display_details(task, self.last_selected_cycle)
+        elif self.last_selected_cycle:
+            self._display_cycle_details(self.last_selected_cycle)
         self._update_status_bar()
+
+    def _display_cycle_details(self, cycle: str) -> None:
+        """
+        Display a summary for the selected cycle.
+
+        Parameters
+        ----------
+        cycle : str
+            The cycle string.
+        """
+        panel = self.query_one("#details_panel", Static)
+
+        # Find cycle info
+        tasks = []
+        for ci in self.all_data:
+            if ci["cycle"] == cycle:
+                tasks = ci["tasks"]
+                break
+
+        if not tasks:
+            panel.update(f"No tasks found for cycle {cycle}")
+            return
+
+        counts = defaultdict(int)
+        for t in tasks:
+            counts[t["state"]] += 1
+
+        table = Table(title=f"Cycle Summary: {cycle}", show_header=True, header_style="bold cyan")
+        table.add_column("State")
+        table.add_column("Count", justify="right")
+
+        states = ["SUCCEEDED", "RUNNING", "FAILED", "DEAD", "QUEUED", "WAITING"]
+        for s in states:
+            if counts[s] > 0:
+                color = self._get_state_color(s)
+                table.add_row(f"[{color}]{s}[/]", str(counts[s]))
+
+        # Add any others
+        for s, c in counts.items():
+            if s not in states:
+                table.add_row(s, str(c))
+
+        panel.update(table)
 
     def watch_last_selected_cycle(self) -> None:
         """
@@ -454,7 +585,11 @@ class RocotoApp(App[None]):
             if self.last_selected_task:
                 path += f" > {self.last_selected_task['task']}"
 
-        status_bar.update(f"{path} | {summary_str}")
+        update_time = ""
+        if self.last_refresh_time:
+            update_time = f" | Updated: {self.last_refresh_time.strftime('%H:%M:%S')}"
+
+        status_bar.update(f"{path} | {summary_str}{update_time}")
 
     def _update_ui(self) -> None:
         """
@@ -538,23 +673,24 @@ class RocotoApp(App[None]):
                 if cstr not in seen_cycles:
                     cnode.remove()
 
-            # Refresh selected task status if one is selected
-            if self.last_selected_task and self.last_selected_cycle:
-                # Find the updated task data
+            # Refresh cycle data and selected task status
+            if self.last_selected_cycle:
                 for cycle_info in self.all_data:
                     if cycle_info["cycle"] == self.last_selected_cycle:
-                        for task in cycle_info["tasks"]:
-                            if task["task"] == self.last_selected_task["task"]:
-                                # Resolve details for the selected task specifically
-                                # to prevent regression to unresolved strings.
-                                resolved_task = task.copy()
-                                if "details" in task:
-                                    resolved_task["details"] = self.parser.resolve_task_details(
-                                        task["details"], self.last_selected_cycle
-                                    )
-                                # Update reactive with new data, triggers watch_last_selected_task
-                                self.last_selected_task = resolved_task
-                                break
+                        # Refresh the table for all tasks in this cycle
+                        self._update_task_table(cycle_info["tasks"])
+
+                        # Refresh selected task if one exists
+                        if self.last_selected_task:
+                            for task in cycle_info["tasks"]:
+                                if task["task"] == self.last_selected_task["task"]:
+                                    resolved_task = task.copy()
+                                    if "details" in task:
+                                        resolved_task["details"] = self.parser.resolve_task_details(
+                                            task["details"], self.last_selected_cycle
+                                        )
+                                    self.last_selected_task = resolved_task
+                                    break
                         break
 
     def _get_state_icon(self, state: str) -> str:
@@ -660,8 +796,16 @@ class RocotoApp(App[None]):
 
         if node.allow_expand:
             node.expand()
-            self.last_selected_cycle = str(node.label)
+            cycle_str = str(node.label)
+            self.last_selected_cycle = cycle_str
             self.last_selected_task = None
+
+            # Show all tasks for this cycle in the table
+            for cycle_info in self.all_data:
+                if cycle_info["cycle"] == cycle_str:
+                    self._update_task_table(cycle_info["tasks"])
+                    break
+
             self._update_status_bar()
         else:
             # Task leaf node
@@ -681,6 +825,13 @@ class RocotoApp(App[None]):
                             self.last_selected_task = resolved_task
                             self.last_selected_cycle = cycle_str
                             self._update_status_bar()
+
+                            # Refresh the table and highlight the selected task
+                            for ci in self.all_data:
+                                if ci["cycle"] == cycle_str:
+                                    self._update_task_table(ci["tasks"], highlight_task=task_name)
+                                    break
+
                             self._display_details(resolved_task, cycle_str)
                             self._update_log()
                             break
@@ -688,7 +839,7 @@ class RocotoApp(App[None]):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """
-        Handle row selection in the status table.
+        Handle row selection in the status table to select the task in the tree.
 
         Parameters
         ----------
@@ -699,13 +850,68 @@ class RocotoApp(App[None]):
         -------
         None
         """
-        # In this version, the table only has one row for the selected task,
-        # so selecting it doesn't change much, but we'll keep the handler.
-        pass
+        table = self.query_one("#selected_task_status", DataTable)
+        row = table.get_row_at(event.cursor_row)
+        task_name_with_icon = str(row[1])
+
+        # Find the task name (everything after the icon and space)
+        parts = task_name_with_icon.split(" ", 1)
+        if len(parts) < 2:
+            return
+        task_name = parts[1]
+
+        # Find this task in the tree and select it
+        tree = self.query_one("#cycle_tree", Tree)
+        for cycle_node in tree.root.children:
+            if str(cycle_node.label) == self.last_selected_cycle:
+                cycle_node.expand()
+                for task_node in cycle_node.children:
+                    if task_node.data == task_name:
+                        tree.select_node(task_node)
+                        return
+
+    def _update_task_table(self, tasks: list[TaskStatus], highlight_task: str | None = None) -> None:
+        """
+        Update the task status table with a list of tasks.
+
+        Parameters
+        ----------
+        tasks : list[TaskStatus]
+            The list of tasks to show.
+        highlight_task : str | None
+            The task name to highlight/select.
+        """
+        table = self.query_one("#selected_task_status", DataTable)
+        if not table.columns:
+            table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
+
+        table.clear()
+        target_row_idx = -1
+
+        for i, task in enumerate(tasks):
+            state = task["state"]
+            icon = self._get_state_icon(state)
+            state_color = self._get_state_color(state)
+
+            table.add_row(
+                self.last_selected_cycle,
+                f"{icon} {task['task']}",
+                str(task["jobid"] or "-"),
+                f"[{state_color}]{state}[/{state_color}]",
+                str(task["exit"] if task["exit"] is not None else "-"),
+                str(task["tries"]),
+                str(task["duration"] or "-"),
+            )
+
+            if highlight_task == task["task"]:
+                target_row_idx = i
+
+        if target_row_idx >= 0:
+            table.move_cursor(row=target_row_idx)
 
     def _display_details(self, task: dict[str, Any], cycle: str) -> None:
         """
-        Display task details and update simplified status.
+        Display task details.
 
         Parameters
         ----------
@@ -718,26 +924,6 @@ class RocotoApp(App[None]):
         -------
         None
         """
-        # Update simplified status table
-        table = self.query_one("#selected_task_status", DataTable)
-        if not table.columns:
-            table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
-        table.clear()
-
-        state = task["state"]
-        icon = self._get_state_icon(state)
-        state_color = self._get_state_color(state)
-
-        table.add_row(
-            cycle,
-            f"{icon} {task['task']}",
-            str(task["jobid"] or "-"),
-            f"[{state_color}]{state}[/{state_color}]",
-            str(task["exit"] if task["exit"] is not None else "-"),
-            str(task["tries"]),
-            str(task["duration"] or "-"),
-        )
-
         # Update details panel
         panel = self.query_one("#details_panel", Static)
         details = task.get("details", {})
@@ -749,42 +935,64 @@ class RocotoApp(App[None]):
         join = details.get("join", "")
 
         exit_str = task["exit"] if task["exit"] is not None else "-"
-        content = f"[bold]Task:[/bold] {task['task']}  [bold]Cycle:[/bold] {cycle}\n"
-        content += f"[bold]State:[/bold] {task['state']}  [bold]Job ID:[/bold] {task['jobid'] or '-'}\n"
-        content += f"[bold]Exit Status:[/bold] {exit_str}  [bold]Tries:[/bold] {task['tries']}\n"
-        content += f"[bold]Duration:[/bold] {task['duration'] or '-'}\n"
-        content += "-" * 40 + "\n"
-        content += f"[bold]Command:[/bold] {command}\n"
-        if account := details.get("account"):
-            content += f"[bold]Account:[/bold] {account}\n"
-        if queue := details.get("queue"):
-            content += f"[bold]Queue:[/bold] {queue}\n"
-        if walltime := details.get("walltime"):
-            content += f"[bold]Walltime:[/bold] {walltime}\n"
-        if memory := details.get("memory"):
-            content += f"[bold]Memory:[/bold] {memory}\n"
 
-        if datatroot := details.get("envars", {}).get("DATAROOT"):
-            content += f"[bold]DATAROOT:[/bold] {datatroot}\n"
+        from rich.console import Group
+        from rich.panel import Panel
+
+        # Overview Table
+        overview = Table.grid(padding=(0, 2))
+        overview.add_column(style="bold cyan")
+        overview.add_column()
+        overview.add_column(style="bold cyan")
+        overview.add_column()
+
+        overview.add_row("Task:", task["task"], "Cycle:", cycle)
+        state_color = self._get_state_color(task["state"])
+        overview.add_row("State:", f"[{state_color}]{task['state']}[/]", "Job ID:", str(task["jobid"] or "-"))
+        overview.add_row("Exit:", str(exit_str), "Tries:", str(task["tries"]))
+        overview.add_row("Duration:", str(task["duration"] or "-"), "", "")
+
+        renderables = [Panel(overview, title="Overview", border_style="blue")]
+
+        # Command and Resources
+        resources = Table.grid(padding=(0, 2))
+        resources.add_column(style="bold cyan")
+        resources.add_column()
+
+        resources.add_row("Command:", command)
+        if account := details.get("account"):
+            resources.add_row("Account:", account)
+        if queue := details.get("queue"):
+            resources.add_row("Queue:", queue)
+        if walltime := details.get("walltime"):
+            resources.add_row("Walltime:", walltime)
+        if memory := details.get("memory"):
+            resources.add_row("Memory:", memory)
 
         if join:
-            content += f"[bold]Log (Joined):[/bold] {join}\n"
+            resources.add_row("Log:", join)
         else:
             if stdout:
-                content += f"[bold]Stdout:[/bold] {stdout}\n"
+                resources.add_row("Stdout:", stdout)
             if stderr:
-                content += f"[bold]Stderr:[/bold] {stderr}\n"
+                resources.add_row("Stderr:", stderr)
 
+        renderables.append(Panel(resources, title="Execution Details", border_style="green"))
+
+        # Environment Variables
         if envars := details.get("envars"):
-            content += "[bold]Environment Variables:[/bold]\n"
-            for k, v in envars.items():
-                content += f"  - {k}={v}\n"
+            env_table = Table(show_header=True, header_style="bold magenta", expand=True)
+            env_table.add_column("Variable")
+            env_table.add_column("Value")
+            for k, v in sorted(envars.items()):
+                env_table.add_row(k, v)
+            renderables.append(Panel(env_table, title="Environment Variables", border_style="magenta"))
 
+        # Dependencies
         if deps := details.get("dependencies"):
-            content += "[bold]Dependencies:[/bold]\n"
-            content += self._format_deps(deps, indent=2)
+            renderables.append(Panel(self._format_deps(deps), title="Dependencies", border_style="yellow"))
 
-        panel.update(content)
+        panel.update(Group(*renderables))
 
     def _format_deps(self, deps: list[dict[str, Any]], indent: int = 0) -> str:
         """
@@ -970,33 +1178,30 @@ class RocotoApp(App[None]):
         if node and node.allow_expand:
             node.toggle()
 
+    def action_top(self) -> None:
+        """Jump to the top of the cycle tree (vi-style g)."""
+        tree = self.query_one("#cycle_tree", Tree)
+        tree.select_node(tree.root)
+        tree.scroll_to_node(tree.root)
+
+    def action_bottom(self) -> None:
+        """Jump to the bottom of the cycle tree (vi-style G)."""
+        tree = self.query_one("#cycle_tree", Tree)
+        last_node = tree.root
+        while last_node.children:
+            last_node = last_node.children[-1]
+            if not last_node.is_expanded:
+                break
+        tree.select_node(last_node)
+        tree.scroll_to_node(last_node)
+
     def action_help(self) -> None:
         """
-        Display a help notification with key bindings.
+        Display a help screen with key bindings.
 
         Triggered by the 'h' key. Matches rocoto_viewer's <h> behavior.
         """
-        help_text = (
-            "Key Bindings (rocoto_viewer compatible):\n"
-            "  c  - rocotocheck on selected task\n"
-            "  b  - rocotoboot on selected task\n"
-            "  r  - rocotorewind on selected task\n"
-            "  R  - rocotorun (run workflow)\n"
-            "  C  - rocotocomplete on selected task\n"
-            "  W  - rewind entire cycle\n"
-            "  →  - next cycle\n"
-            "  ←  - previous cycle\n"
-            "  x  - expand/collapse metatask\n"
-            "  l  - reload status data\n"
-            "  F  - find last running cycle\n"
-            "  t  - toggle log panel\n"
-            "  f  - toggle log follow\n"
-            "  /  - search log\n"
-            "  n/N - next/prev search match\n"
-            "  h  - this help\n"
-            "  q/Q - quit"
-        )
-        self.notify(help_text, timeout=15)
+        self.push_screen(HelpScreen())
 
     def action_rewind_cycle(self) -> None:
         """
