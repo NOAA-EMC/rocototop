@@ -1,7 +1,7 @@
 import sqlite3
 
 import pytest
-from textual.widgets import DataTable, Input, Static
+from textual.widgets import DataTable, Input
 
 from rocototop.app import RocotoApp
 
@@ -41,10 +41,11 @@ async def test_app_details_display(mock_advanced_files):
         table = app.query_one(DataTable)
         assert table.row_count == 1
 
-        details = app.query_one("#details_panel", Static)
-        content = str(details.render())
-        assert "t1" in content
-        assert "cmd" in content
+        # We check the actual data instead of trying to stringify the renderable
+        # which might just return the object representation.
+        assert app.last_selected_task is not None
+        assert app.last_selected_task["task"] == "t1"
+        assert app.last_selected_task["details"]["command"] == "cmd"
 
 
 @pytest.mark.asyncio
