@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<workflow name="ux_test">
+  <cycledef group="default">202401010000 202401010000 06:00:00</cycledef>
+  <task name="alpha_task" cycledefs="default"></task>
+  <task name="beta_task" cycledefs="default"></task>
+  <task name="gamma_task" cycledefs="default"></task>
+</workflow>

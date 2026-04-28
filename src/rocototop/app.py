@@ -15,7 +15,9 @@ from datetime import datetime
 from typing import Any
 
 import aiofiles
+from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -74,11 +76,14 @@ class HelpScreen(ModalScreen):
             ("x", "Expand/Collapse"),
             ("l", "Reload Status Data"),
             ("F", "Find Last Running Cycle"),
+            ("s", "Toggle Hide Succeeded"),
+            ("E", "Expand All Cycles"),
+            ("X", "Collapse All Cycles"),
             ("g", "Jump to Top of Tree"),
             ("G", "Jump to Bottom of Tree"),
             ("t", "Toggle Details/Log Tabs"),
             ("f", "Toggle Log Follow Mode"),
-            ("/", "Search Log (vi-style)"),
+            ("/", "Search/Filter (vi-style)"),
             ("n/N", "Next/Prev Search Match"),
             ("h", "Show this Help"),
             ("q/Q", "Quit"),
@@ -154,11 +159,14 @@ class RocotoApp(App[None]):
         Binding("right", "next_cycle", "Next Cycle", show=True),
         Binding("left", "prev_cycle", "Prev Cycle", show=True),
         Binding("F", "find_running", "Find Running", show=True),
+        Binding("s", "toggle_succeeded", "Hide Succeeded", show=True),
+        Binding("E", "expand_all", "Expand All", show=True),
+        Binding("X", "collapse_all", "Collapse All", show=True),
         Binding("x", "toggle_expand", "Expand/Collapse", show=True),
         Binding("t", "toggle_log", "Toggle Log", show=True),
         Binding("f", "toggle_follow", "Follow Log", show=True),
         Binding("h", "help", "Help", show=True),
-        Binding("slash", "open_log_search", "Search Log", show=True),
+        Binding("slash", "open_search", "Search", show=True),
         Binding("n", "search_next", "Next Match", show=False),
         Binding("N", "search_prev", "Prev Match", show=False),
         Binding("escape", "close_log_search", "Close Search", show=False, priority=True),
@@ -270,6 +278,7 @@ class RocotoApp(App[None]):
     """
 
     all_data: reactive[list[CycleStatus]] = reactive([])
+    hide_succeeded: reactive[bool] = reactive(False)
     workflow_summary: reactive[dict[str, int]] = reactive({})
     last_refresh_time: reactive[datetime | None] = reactive(None)
     last_selected_task: reactive[dict[str, Any] | None] = reactive(None)
@@ -292,6 +301,8 @@ class RocotoApp(App[None]):
         self._search_matches: list[int] = []
         self._search_index: int = -1
         self._expanded_cycles: set[str] = set()
+        self._sort_column: str = "Task"
+        self._sort_reverse: bool = False
 
     def compose(self) -> ComposeResult:
         """
@@ -442,6 +453,18 @@ class RocotoApp(App[None]):
         self._update_ui()
         self._update_status_bar()
 
+    def watch_hide_succeeded(self, hide: bool) -> None:
+        """
+        Watch for changes in hide_succeeded and update the UI.
+
+        Parameters
+        ----------
+        hide : bool
+            Whether to hide succeeded tasks.
+        """
+        self._update_ui()
+        self._update_status_bar()
+
     def watch_workflow_summary(self, summary: dict[str, int]) -> None:
         """
         Watch for changes in workflow_summary and update the status bar.
@@ -578,6 +601,10 @@ class RocotoApp(App[None]):
 
         summary_str = " | ".join(parts) if parts else "No tasks"
 
+        # Show hide_succeeded status
+        if self.hide_succeeded:
+            summary_str += " [bold magenta](Hiding Succeeded)[/bold magenta]"
+
         # Update path
         path = "Path: Workflow"
         if self.last_selected_cycle:
@@ -619,10 +646,12 @@ class RocotoApp(App[None]):
                 # Pre-filter tasks to see if cycle should be shown
                 visible_tasks = []
                 for task in cycle_info["tasks"]:
+                    if self.hide_succeeded and task["state"] == "SUCCEEDED":
+                        continue
                     if not filter_text or filter_text in task["task"].lower():
                         visible_tasks.append(task)
 
-                if not visible_tasks and filter_text:
+                if not visible_tasks and (filter_text or self.hide_succeeded):
                     # Cycle should be hidden. If it exists, we skip it
                     # so that it gets removed in the cleanup loop.
                     continue
@@ -649,7 +678,17 @@ class RocotoApp(App[None]):
                         icon = self._get_state_icon(state)
                         state_color = self._get_state_color(state)
 
-                        leaf_label = f"{icon} {task_name} [{state_color}]{state}[/{state_color}]"
+                        # Highlight matching part of task name
+                        display_name = escape(task_name)
+                        if filter_text:
+                            # Use regex for case-insensitive replacement to keep original case
+                            try:
+                                pattern = re.compile(re.escape(filter_text), re.IGNORECASE)
+                                display_name = pattern.sub(lambda m: f"[reverse]{escape(m.group(0))}[/reverse]", task_name)
+                            except re.error:
+                                pass
+
+                        leaf_label = f"{icon} {display_name} [{state_color}]{state}[/{state_color}]"
 
                         task_node = existing_tasks.get(task_name)
                         if task_node:
@@ -837,6 +876,31 @@ class RocotoApp(App[None]):
                             break
                     break
 
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        """
+        Handle header selection in the status table to sort tasks.
+
+        Parameters
+        ----------
+        event : DataTable.HeaderSelected
+            The data table header selection event.
+        """
+        column_label = str(event.column.label)
+        if self._sort_column == column_label:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = column_label
+            self._sort_reverse = False
+
+        # Refresh the table with new sorting
+        if self.last_selected_cycle:
+            for cycle_info in self.all_data:
+                if cycle_info["cycle"] == self.last_selected_cycle:
+                    self._update_task_table(
+                        cycle_info["tasks"], highlight_task=self.last_selected_task["task"] if self.last_selected_task else None
+                    )
+                    break
+
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """
         Handle row selection in the status table to select the task in the tree.
@@ -885,10 +949,29 @@ class RocotoApp(App[None]):
         if not table.columns:
             table.add_columns("Cycle", "Task", "Job ID", "State", "Exit", "Tries", "Duration")
 
+        # Apply sorting
+        def sort_key(t: TaskStatus) -> Any:
+            col = self._sort_column
+            if col == "Task":
+                return t["task"]
+            elif col == "Job ID":
+                return t["jobid"] or ""
+            elif col == "State":
+                return t["state"]
+            elif col == "Exit":
+                return t["exit"] if t["exit"] is not None else -1
+            elif col == "Tries":
+                return t["tries"]
+            elif col == "Duration":
+                return t["duration"] or 0
+            return t["task"]
+
+        sorted_tasks = sorted(tasks, key=sort_key, reverse=self._sort_reverse)
+
         table.clear()
         target_row_idx = -1
 
-        for i, task in enumerate(tasks):
+        for i, task in enumerate(sorted_tasks):
             state = task["state"]
             icon = self._get_state_icon(state)
             state_color = self._get_state_color(state)
@@ -1178,6 +1261,27 @@ class RocotoApp(App[None]):
         if node and node.allow_expand:
             node.toggle()
 
+    def action_expand_all(self) -> None:
+        """Expand all cycles in the tree."""
+        tree = self.query_one("#cycle_tree", Tree)
+        for node in tree.root.children:
+            node.expand()
+            self._expanded_cycles.add(str(node.label))
+        self._update_ui()
+
+    def action_collapse_all(self) -> None:
+        """Collapse all cycles in the tree."""
+        tree = self.query_one("#cycle_tree", Tree)
+        for node in tree.root.children:
+            node.collapse()
+            self._expanded_cycles.discard(str(node.label))
+        self._update_ui()
+
+    def action_toggle_succeeded(self) -> None:
+        """Toggle visibility of succeeded tasks."""
+        self.hide_succeeded = not self.hide_succeeded
+        self.notify(f"Hide succeeded: {'ON' if self.hide_succeeded else 'OFF'}")
+
     def action_top(self) -> None:
         """Jump to the top of the cycle tree (vi-style g)."""
         tree = self.query_one("#cycle_tree", Tree)
@@ -1359,13 +1463,24 @@ class RocotoApp(App[None]):
         self.log_follow = not self.log_follow
         self.notify(f"Log follow: {'ON' if self.log_follow else 'OFF'}")
 
-    def action_open_log_search(self) -> None:
-        """Open the log search bar and focus the input (vi-style /)."""
-        bar = self.query_one("#log_search_bar")
-        bar.add_class("visible")
-        search_input = self.query_one("#log_search_input", Input)
-        search_input.value = ""
-        search_input.focus()
+    def action_open_search(self) -> None:
+        """
+        Open search based on active tab (vi-style /).
+
+        If in Log tab, opens log search.
+        Otherwise, focuses the task filter input.
+        """
+        tabbed_content = self.query_one(TabbedContent)
+        if tabbed_content.active == "log_tab":
+            bar = self.query_one("#log_search_bar")
+            bar.add_class("visible")
+            search_input = self.query_one("#log_search_input", Input)
+            search_input.value = ""
+            search_input.focus()
+        else:
+            filter_input = self.query_one("#filter_input", Input)
+            filter_input.focus()
+            filter_input.select_all()
 
     def action_close_log_search(self) -> None:
         """Close the log search bar and clear highlights."""
@@ -1453,19 +1568,20 @@ class RocotoApp(App[None]):
         log_panel.clear()
 
         try:
+            # Use raw query for regex support, same as _run_log_search
             pattern = re.compile(self._search_query, re.IGNORECASE) if self._search_query else None
         except re.error:
             pattern = None
 
-        match_set = set(self._search_matches) if pattern else set()
-
         for i, line in enumerate(self._log_lines):
+            text = Text(line)
             if i == highlight_line:
-                log_panel.write(f"[black on yellow]{line}[/]", markup=True)
-            elif i in match_set and pattern:
-                log_panel.write(f"[on #333333]{line}[/]", markup=True)
-            else:
-                log_panel.write(line)
+                text.stylize("black on yellow")
+            elif pattern:
+                for match in pattern.finditer(line):
+                    text.stylize("black on cyan", match.start(), match.end())
+
+            log_panel.write(text)
 
     def _update_log(self) -> None:
         """
