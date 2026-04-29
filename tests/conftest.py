@@ -1,5 +1,7 @@
 import pytest
+
 from rocototop.parser import RocotoParser
+
 
 @pytest.fixture(autouse=True)
 def clear_parser_cache():

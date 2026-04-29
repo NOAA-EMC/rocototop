@@ -41,6 +41,7 @@ async def test_status_bar_path(mock_rocoto_data):
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
         from textual.widgets import Tree
+
         for _ in range(50):
             if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
                 break
