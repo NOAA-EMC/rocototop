@@ -51,7 +51,10 @@ async def test_large_log_truncation(mock_rocoto_large_log):
     app.MAX_LOG_READ_SIZE = 1000
 
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         # Select task from tree to load log
         tree = app.query_one("#cycle_tree", Tree)
@@ -77,7 +80,10 @@ async def test_tree_node_reuse(mock_rocoto_large_log):
     app = RocotoApp(workflow_file=wf, database_file=db)
 
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         tree = app.query_one("#cycle_tree", Tree)
         cycle_node = tree.root.children[0]

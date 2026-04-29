@@ -39,7 +39,12 @@ async def test_app_actions(mock_rocoto_files):
     wf, db = mock_rocoto_files
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        from textual.widgets import Tree
+
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         # Select a task
         from textual.widgets import Tree
@@ -47,7 +52,10 @@ async def test_app_actions(mock_rocoto_files):
         tree = app.query_one("#cycle_tree", Tree)
         cycle_node = tree.root.children[0]
         cycle_node.expand()
-        await pilot.pause(0.1)
+        for _ in range(50):
+            if cycle_node.children:
+                break
+            await pilot.pause(0.1)
         task_node = cycle_node.children[0]
         tree.select_node(task_node)
         await pilot.pause(0.1)

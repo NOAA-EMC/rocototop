@@ -45,14 +45,20 @@ async def test_pulse_runs_rocotorun(mock_rocoto_files):
         mock_exec.return_value = mock_process
 
         async with app.run_test() as pilot:
-            await pilot.pause(0.5)
+            for _ in range(50):
+                if not app.workers:
+                    break
+                await pilot.pause(0.1)
 
             # Reset mock after initial refresh on mount
             mock_exec.reset_mock()
 
             # Press 'R' for run (rocotorun)
             await pilot.press("R")
-            await pilot.pause(0.5)
+            for _ in range(50):
+                if not app.workers:
+                    break
+                await pilot.pause(0.1)
 
             # Verify rocotorun was called
             mock_exec.assert_called_once()
@@ -76,14 +82,20 @@ async def test_refresh_runs_rocotorun(mock_rocoto_files):
         mock_exec.return_value = mock_process
 
         async with app.run_test() as pilot:
-            await pilot.pause(0.5)
+            for _ in range(50):
+                if not app.workers:
+                    break
+                await pilot.pause(0.1)
 
             # Reset mock
             mock_exec.reset_mock()
 
             # Press 'R' for run (rocotorun) — matches rocoto_viewer's <R> key
             await pilot.press("R")
-            await pilot.pause(0.5)
+            for _ in range(50):
+                if not app.workers:
+                    break
+                await pilot.pause(0.1)
 
             # Verify rocotorun was called
             mock_exec.assert_called_once()

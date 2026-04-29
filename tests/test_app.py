@@ -41,7 +41,10 @@ async def test_app_ui_loading(mock_rocoto_files):
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
         # Wait for refresh to complete (it's a background worker)
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         tree = app.query_one("#cycle_tree", Tree)
         assert tree.root.children
@@ -77,10 +80,17 @@ async def test_app_status_bar_and_filtering(mock_rocoto_files):
     wf, db = mock_rocoto_files
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         status_bar = app.query_one("#status_bar")
         # Check summary in status bar
+        for _ in range(50):
+            if "S:1" in str(status_bar.render()):
+                break
+            await pilot.pause(0.1)
         assert "S:1" in str(status_bar.render())
 
         # Test filtering

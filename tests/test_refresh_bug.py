@@ -31,7 +31,10 @@ async def test_refresh_updates_status(tmp_path):
 
     app = RocotoApp(workflow_file=str(wf), database_file=str(db), refresh_interval=1)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         # Check initial state
         tree = app.query_one("#cycle_tree", Tree)
@@ -52,7 +55,10 @@ async def test_refresh_updates_status(tmp_path):
 
         # Trigger refresh (reload data)
         await pilot.press("l")
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if "RUNNING" in str(task_node.label):
+                break
+            await pilot.pause(0.1)
 
         # Check if updated
         assert "RUNNING" in str(task_node.label)
