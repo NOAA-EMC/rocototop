@@ -45,7 +45,11 @@ async def test_log_viewer_toggle_and_content(mock_rocoto_with_logs):
     wf, db, log = mock_rocoto_with_logs
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        from textual.widgets import Tree
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         # Toggle log viewer (switches tab)
         from textual.widgets import TabbedContent
@@ -63,11 +67,17 @@ async def test_log_viewer_toggle_and_content(mock_rocoto_with_logs):
         tree = app.query_one("#cycle_tree", Tree)
         cycle_node = tree.root.children[0]
         cycle_node.expand()
-        await pilot.pause(0.1)
+        for _ in range(50):
+            if cycle_node.children:
+                break
+            await pilot.pause(0.1)
         task_node = cycle_node.children[0]
         tree.select_node(task_node)
 
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if log_panel.virtual_size.height > 0:
+                break
+            await pilot.pause(0.1)
 
         # Check content
         assert log_panel.virtual_size.height > 0
@@ -79,7 +89,10 @@ async def test_log_viewer_toggle_and_content(mock_rocoto_with_logs):
             f.write("Line 3\n")
             f.flush()
 
-        await pilot.pause(0.5)  # Wait for tailer to pick it up
+        for _ in range(50):
+            if log_panel.virtual_size.height > initial_height:
+                break
+            await pilot.pause(0.1)
 
         # The virtual height should have increased
         assert log_panel.virtual_size.height > initial_height

@@ -40,7 +40,10 @@ async def test_tree_expansion_on_select(mock_rocoto_data):
     wf, db = mock_rocoto_data
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         tree = app.query_one("#cycle_tree", Tree)
         cycle_node = tree.root.children[0]
@@ -57,7 +60,10 @@ async def test_tree_expansion_on_select(mock_rocoto_data):
         # but let's try one more time with a click if possible
         await pilot.press("enter")
 
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if cycle_node.is_expanded:
+                break
+            await pilot.pause(0.1)
 
         # Check if expanded. If not, try manual trigger to see if it's the logic or the pilot.
         if not cycle_node.is_expanded:
@@ -68,7 +74,10 @@ async def test_tree_expansion_on_select(mock_rocoto_data):
 
         # Refresh and check if it stays expanded
         app.action_reload()
-        await pilot.pause(0.5)
+        for _ in range(50):
+            if not app.workers:
+                break
+            await pilot.pause(0.1)
 
         cycle_node = tree.root.children[0]  # Get it again just in case
         assert cycle_node.is_expanded is True

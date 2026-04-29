@@ -40,7 +40,11 @@ async def test_status_bar_path(mock_rocoto_data):
     wf, db = mock_rocoto_data
     app = RocotoApp(workflow_file=wf, database_file=db)
     async with app.run_test() as pilot:
-        await pilot.pause(0.5)
+        from textual.widgets import Tree
+        for _ in range(50):
+            if not app.workers and app.query_one("#cycle_tree", Tree).root.children:
+                break
+            await pilot.pause(0.1)
 
         status_bar = app.query_one("#status_bar", Static)
         assert "Path: Workflow" in str(status_bar.content)
@@ -51,11 +55,17 @@ async def test_status_bar_path(mock_rocoto_data):
         tree = app.query_one("#cycle_tree", Tree)
         cycle_node = tree.root.children[0]
         cycle_node.expand()
-        await pilot.pause(0.1)
+        for _ in range(50):
+            if cycle_node.children:
+                break
+            await pilot.pause(0.1)
         task_node = cycle_node.children[0]
         tree.select_node(task_node)
 
-        await pilot.pause(0.1)
+        for _ in range(50):
+            if "task1" in str(status_bar.content):
+                break
+            await pilot.pause(0.1)
 
         assert "202301010000" in str(status_bar.content)
         assert "task1" in str(status_bar.content)
